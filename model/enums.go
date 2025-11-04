@@ -84,27 +84,18 @@ var AccentCodeToName = map[int]string{
 }
 
 // PosNameToCode is the reverse mapping of PosCodeToName (for API query parameter parsing)
-var PosNameToCode = makePosNameToCode()
-
-// makePosNameToCode creates the inverse mapping of PosCodeToName
-func makePosNameToCode() map[string]int {
-	result := make(map[string]int)
-	for code, name := range PosCodeToName {
-		result[name] = code
-	}
-	return result
-}
+var PosNameToCode = makeReverseMap(PosCodeToName)
 
 // AccentNameToCode is the reverse mapping of AccentCodeToName (for API query parameter parsing)
-var AccentNameToCode = makeAccentNameToCode()
+var AccentNameToCode = makeReverseMap(AccentCodeToName)
 
-// makeAccentNameToCode creates the inverse mapping of AccentCodeToName
-func makeAccentNameToCode() map[string]int {
-	result := make(map[string]int)
-	for code, name := range AccentCodeToName {
-		result[name] = code
+// makeReverseMap creates a reverse mapping from name to code
+func makeReverseMap(forward map[int]string) map[string]int {
+	reverse := make(map[string]int, len(forward))
+	for code, name := range forward {
+		reverse[name] = code
 	}
-	return result
+	return reverse
 }
 
 // OxfordLevelCodeToName maps Oxford level enum codes to their canonical names

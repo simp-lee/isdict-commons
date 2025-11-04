@@ -2,7 +2,3 @@
 *.out
 coverage.txt
 coverage.html
-
-# Go workspace file (multi-module workspaces)
-go.work
-go.work.sum

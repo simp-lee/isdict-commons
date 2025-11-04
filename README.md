@@ -2,16 +2,19 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.24-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Test](https://github.com/simp-lee/isdict-commons/workflows/Test/badge.svg)](https://github.com/simp-lee/isdict-commons/actions)
 
 Shared data models and utilities for English-Chinese dictionary applications.
 
 ## Features
 
-- Database models for words, pronunciations, senses, examples, and variants
-- API response structures
-- Text normalization utilities
-- Standardized enumerations (POS, accents, CEFR levels, etc.)
-- Multi-source support (CEFR, Oxford, CET, word frequency, Collins)
+- **Database Models**: Complete schema for words, pronunciations, senses, examples, and variants
+- **API Response Structures**: Unified response format with error handling
+- **Text Normalization**: Smart case-folding that preserves apostrophes and slashes
+- **Standardized Enumerations**: POS (23 types), accents (10 types), CEFR levels, etc.
+- **Multi-source Support**: CEFR, Oxford, CET, word frequency, Collins ratings
+- **Database Migration**: Enterprise-grade PostgreSQL schema migration tools
+- **Full Test Coverage**: 100% coverage for all testable packages
 
 ## Installation
 
@@ -74,7 +77,7 @@ response := model.WordResponse{
 }
 
 successResponse := model.NewSuccessResponse(response)
-errorResponse := model.NewErrorResponse("Word not found")
+errorResponse := model.NewErrorResponse("NOT_FOUND", "Word not found", nil)
 ```
 
 ## Package Structure
@@ -82,7 +85,8 @@ errorResponse := model.NewErrorResponse("Word not found")
 ```
 isdict-commons/
 ├── model/          # Database and response models, enumerations
-└── textutil/       # Text normalization utilities
+├── textutil/       # Text normalization utilities
+└── migration/      # Database schema migration tools
 ```
 
 ## Core Models
@@ -95,10 +99,12 @@ type Word struct {
     Headword           string  // Original case-preserved form
     HeadwordNormalized string  // Lowercase for lookups
     CEFRLevel          int
-    CEFRSource         string
+    CEFRSource         string  // CEFR data source
     CETLevel           int
     OxfordLevel        int
+    SchoolLevel        int
     FrequencyRank      int
+    FrequencyCount     int
     CollinsStars       int
     TranslationZH      string
 
@@ -128,6 +134,8 @@ type Sense struct {
     WordID       uint
     POS          int    // 1=noun, 2=verb, 3=adjective, etc.
     CEFRLevel    int
+    CEFRSource   string // CEFR data source
+    OxfordLevel  int    // Sense-level Oxford annotation
     DefinitionEN string
     DefinitionZH string
     SenseOrder   int
@@ -158,7 +166,9 @@ type WordVariant struct {
     HeadwordNormalized string
     Kind               VariantKind  // 1=form, 2=alias
     FormType           *int         // 1=past, 2=past_participle, 5=plural, etc.
+    Tags               []string     // Additional tags (PostgreSQL array)
     FrequencyRank      int
+    FrequencyCount     int
 }
 ```
 
@@ -244,7 +254,68 @@ go test ./...           # Run all tests
 go test -cover ./...    # With coverage
 ```
 
+## Database Migration
 
+The `migration` package provides tools for PostgreSQL schema migration:
+
+```go
+import (
+    "github.com/simp-lee/isdict-commons/migration"
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+)
+
+// Connect to database
+db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+// Create migrator
+migrator := migration.NewMigrator(db)
+
+// Run migration with options
+err = migrator.Migrate(&migration.MigrateOptions{
+    DropTables:     false,  // Don't drop existing tables
+    SkipExtensions: false,  // Enable PostgreSQL extensions (pg_trgm)
+    SkipIndexes:    false,  // Create all indexes
+    Verbose:        true,   // Enable detailed logging
+})
+```
+
+**Migration includes:**
+- Table creation with constraints
+- PostgreSQL `pg_trgm` extension for fuzzy search
+- Custom unique constraints with NULL handling
+- GIN trigram indexes for performance
+- Migration verification and integrity checks
+
+## API Response Structure
+
+All API endpoints use a unified response format:
+
+```go
+// Success response
+{
+    "success": true,
+    "data": { ... },
+    "error": null,
+    "meta": {
+        "page": 1,
+        "page_size": 20,
+        "total": 100
+    }
+}
+
+// Error response
+{
+    "success": false,
+    "data": null,
+    "error": {
+        "code": "NOT_FOUND",
+        "message": "Word not found",
+        "details": null
+    },
+    "meta": null
+}
+```
 
 ## License
 
