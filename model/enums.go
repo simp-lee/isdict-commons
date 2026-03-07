@@ -105,6 +105,20 @@ var OxfordLevelCodeToName = map[int]string{
 	2: "Oxford 5000",
 }
 
+// CEFRCodeToName maps CEFR level enum codes to their canonical names
+var CEFRCodeToName = map[int]string{
+	0: "",
+	1: "A1",
+	2: "A2",
+	3: "B1",
+	4: "B2",
+	5: "C1",
+	6: "C2",
+}
+
+// CEFRNameToCode is the reverse mapping of CEFRCodeToName
+var CEFRNameToCode = makeReverseMap(CEFRCodeToName)
+
 // GetPOSName returns the canonical name for a POS code
 func GetPOSName(code int) string {
 	if name, ok := PosCodeToName[code]; ok {
@@ -155,6 +169,21 @@ func GetOxfordLevelName(code int) string {
 		return name
 	}
 	return ""
+}
+
+// GetCEFRLevelName returns the canonical name for a CEFR level code.
+// Returns "" for unknown codes (suitable for JSON where unknown = empty).
+func GetCEFRLevelName(code int) string {
+	if name, ok := CEFRCodeToName[code]; ok {
+		return name
+	}
+	return ""
+}
+
+// ParseCEFRLevel converts a CEFR level name to its code
+func ParseCEFRLevel(name string) (int, bool) {
+	code, ok := CEFRNameToCode[name]
+	return code, ok
 }
 
 // OxfordLevelFromString converts oxford source string to level code

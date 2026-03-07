@@ -2,3 +2,6 @@
 *.out
 coverage.txt
 coverage.html
+
+.agents-work/
+.github/

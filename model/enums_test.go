@@ -2,6 +2,44 @@ package model
 
 import "testing"
 
+func TestFormTypeMappingAliases(t *testing.T) {
+	tests := []struct {
+		name     string
+		variants []string
+		expected int
+	}{
+		{name: "past aliases", variants: []string{"past", "past_tense", "preterite"}, expected: 1},
+		{name: "past participle aliases", variants: []string{"past_participle", "past_part"}, expected: 2},
+		{name: "present third aliases", variants: []string{"present_3rd", "3rd_person_singular", "third_person_singular"}, expected: 3},
+		{name: "gerund aliases", variants: []string{"gerund", "present_participle", "ing_form"}, expected: 4},
+		{name: "possessive aliases", variants: []string{"possessive", "genitive"}, expected: 8},
+		{name: "infinitive aliases", variants: []string{"infinitive", "to_infinitive"}, expected: 9},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, variant := range tt.variants {
+				code, ok := FormTypeMapping[variant]
+				if !ok {
+					t.Fatalf("FormTypeMapping[%q] missing", variant)
+				}
+				if code != tt.expected {
+					t.Fatalf("FormTypeMapping[%q] = %d; want %d", variant, code, tt.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestVariantKindConstantsMatchSchema(t *testing.T) {
+	if VariantForm != 1 {
+		t.Fatalf("VariantForm = %d; want 1", VariantForm)
+	}
+	if VariantAlias != 2 {
+		t.Fatalf("VariantAlias = %d; want 2", VariantAlias)
+	}
+}
+
 func TestGetPOSName(t *testing.T) {
 	tests := []struct {
 		code     int
@@ -140,6 +178,59 @@ func TestGetOxfordLevelName(t *testing.T) {
 		result := GetOxfordLevelName(tt.code)
 		if result != tt.expected {
 			t.Errorf("GetOxfordLevelName(%d) = %s; want %s", tt.code, result, tt.expected)
+		}
+	}
+}
+
+func TestGetCEFRLevelName(t *testing.T) {
+	tests := []struct {
+		code     int
+		expected string
+	}{
+		{0, ""},
+		{1, "A1"},
+		{2, "A2"},
+		{3, "B1"},
+		{4, "B2"},
+		{5, "C1"},
+		{6, "C2"},
+		{-1, ""},
+		{999, ""},
+	}
+
+	for _, tt := range tests {
+		result := GetCEFRLevelName(tt.code)
+		if result != tt.expected {
+			t.Errorf("GetCEFRLevelName(%d) = %s; want %s", tt.code, result, tt.expected)
+		}
+	}
+}
+
+func TestParseCEFRLevel(t *testing.T) {
+	tests := []struct {
+		name     string
+		expected int
+		ok       bool
+	}{
+		{"A1", 1, true},
+		{"A2", 2, true},
+		{"B1", 3, true},
+		{"B2", 4, true},
+		{"C1", 5, true},
+		{"C2", 6, true},
+		{"", 0, true},
+		{"X1", 0, false},
+		{"a1", 0, false},
+		{"invalid", 0, false},
+	}
+
+	for _, tt := range tests {
+		code, ok := ParseCEFRLevel(tt.name)
+		if ok != tt.ok {
+			t.Errorf("ParseCEFRLevel(%s) ok = %v; want %v", tt.name, ok, tt.ok)
+		}
+		if ok && code != tt.expected {
+			t.Errorf("ParseCEFRLevel(%s) = %d; want %d", tt.name, code, tt.expected)
 		}
 	}
 }

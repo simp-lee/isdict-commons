@@ -114,10 +114,10 @@ type WordVariant struct {
 	VariantText        string         `gorm:"type:varchar(255);not null;index:idx_word_variants_variant_text"`
 	HeadwordNormalized string         `gorm:"type:varchar(255);not null;default:'';index:idx_word_variants_headword_normalized"`
 	Kind               VariantKind    `gorm:"type:smallint;not null;check:kind BETWEEN 1 AND 2"`
-	FormType           *int           `gorm:"type:smallint;check:form_type BETWEEN 1 AND 9"`                                       // Only filled for morphological variants
-	Tags               pq.StringArray `gorm:"type:text[]"`                                                                         // PostgreSQL native array for additional tags
-	FrequencyCount     int            `gorm:"not null;default:0;check:frequency_count >= 0"`                                       // Frequency count for this variant
-	FrequencyRank      int            `gorm:"not null;default:0;index:idx_word_variants_frequency_rank;check:frequency_rank >= 0"` // Frequency rank for this variant
+	FormType           *int           `gorm:"type:smallint;check:form_type BETWEEN 1 AND 9;check:word_variants_kind_form_type,((kind = 1 AND form_type IS NOT NULL) OR (kind = 2 AND form_type IS NULL))"` // Only filled for morphological variants
+	Tags               pq.StringArray `gorm:"type:text[]"`                                                                                                                                                 // PostgreSQL native array for additional tags
+	FrequencyCount     int            `gorm:"not null;default:0;check:frequency_count >= 0"`                                                                                                               // Frequency count for this variant
+	FrequencyRank      int            `gorm:"not null;default:0;index:idx_word_variants_frequency_rank;check:frequency_rank >= 0"`                                                                         // Frequency rank for this variant
 	CreatedAt          time.Time      `gorm:"<-:create"`
 	UpdatedAt          time.Time      `gorm:"<-:update"`
 }

@@ -16,10 +16,14 @@ func TestToNormalized(t *testing.T) {
 
 		// Preserve apostrophes - key test cases
 		{"it's", "it's"},                 // contraction: it is
+		{"it’s", "it's"},                 // smart apostrophe should normalize to ASCII apostrophe
+		{"it‘s", "it's"},                 // left single quotation mark should normalize to ASCII apostrophe
 		{"its", "its"},                   // possessive: its
 		{"we'll", "we'll"},               // contraction: we will
+		{"we’ll", "we'll"},               // smart apostrophe should preserve normalized contraction form
 		{"well", "well"},                 // adverb/noun: well
 		{"rock-'n'-roll", "rock'n'roll"}, // special spelling, preserve apostrophe
+		{"rock-’n’-roll", "rock'n'roll"}, // smart apostrophes normalize before punctuation stripping
 
 		// Preserve slashes
 		{"cooperate/co-operation", "cooperate/cooperation"},
@@ -46,5 +50,15 @@ func TestToNormalized(t *testing.T) {
 				t.Errorf("ToNormalized(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestToNormalizedEquivalentApostrophes(t *testing.T) {
+	if got, want := ToNormalized("it's"), ToNormalized("it’s"); got != want {
+		t.Fatalf("ASCII and Unicode apostrophes should normalize equally: got %q, want %q", got, want)
+	}
+
+	if got, want := ToNormalized("we'll"), ToNormalized("we‘ll"); got != want {
+		t.Fatalf("ASCII and Unicode apostrophes should normalize equally: got %q, want %q", got, want)
 	}
 }

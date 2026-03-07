@@ -4,7 +4,7 @@ package model
 // These fields are used across different response types to indicate
 // word difficulty, frequency, and categorization levels
 type WordAnnotations struct {
-	CEFRLevel      int    `json:"cefr_level"`               // European standard (A1=1, A2=2, B1=3, B2=4, C1=5, C2=6, 0=unknown)
+	CEFRLevel      string `json:"cefr_level"`               // CEFR level: "A1","A2","B1","B2","C1","C2", or "" (unknown)
 	CEFRSource     string `json:"cefr_source,omitempty"`    // CEFR data source: "oxford", "cefrj", "both", or "" (empty if no CEFR data)
 	CETLevel       int    `json:"cet_level"`                // China College English Test (4=CET4, 6=CET6, 0=unknown)
 	OxfordLevel    int    `json:"oxford_level"`             // Oxford wordlist (1=Oxford3000, 2=Oxford5000, 0=unknown)
@@ -37,7 +37,7 @@ type PronunciationResponse struct {
 type SenseResponse struct {
 	SenseID      uint              `json:"sense_id"`
 	POS          string            `json:"pos"`
-	CEFRLevel    int               `json:"cefr_level"`
+	CEFRLevel    string            `json:"cefr_level"`
 	CEFRSource   string            `json:"cefr_source,omitempty"` // CEFR data source
 	OxfordLevel  int               `json:"oxford_level"`          // Sense-level Oxford annotation
 	DefinitionEN string            `json:"definition_en,omitempty"`

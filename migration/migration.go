@@ -34,53 +34,79 @@ func (m *Migrator) Migrate(opts *MigrateOptions) error {
 		opts = &MigrateOptions{}
 	}
 
+	m.logMigrationStart(opts)
+
+	if err := m.runSchemaMigration(opts); err != nil {
+		return err
+	}
+
+	skippedIndexes, err := m.createIndexesForMigration(opts)
+	if err != nil {
+		return err
+	}
+
+	m.updateStatisticsWithWarning()
+
+	if err := m.verifyMigrationWithLogging(opts, skippedIndexes); err != nil {
+		return err
+	}
+
+	m.logMigrationComplete(opts)
+	return nil
+}
+
+func (m *Migrator) logMigrationStart(opts *MigrateOptions) {
 	if opts.Verbose {
 		log.Println("========== Starting Database Migration ==========")
 	}
+}
 
-	// Step 1: Drop tables if requested
+func (m *Migrator) runSchemaMigration(opts *MigrateOptions) error {
 	if opts.DropTables {
 		if err := m.DropAllTables(); err != nil {
 			return fmt.Errorf("drop tables: %w", err)
 		}
 	}
 
-	// Step 2: Enable PostgreSQL extensions
 	if !opts.SkipExtensions {
 		if err := m.EnableExtensions(); err != nil {
 			return fmt.Errorf("enable extensions: %w", err)
 		}
 	}
 
-	// Step 3: Auto-migrate tables
 	if err := m.AutoMigrateTables(); err != nil {
 		return fmt.Errorf("auto migrate tables: %w", err)
 	}
 
-	// Step 4: Create custom unique constraints
 	if err := m.CreateUniqueConstraints(); err != nil {
 		return fmt.Errorf("create unique constraints: %w", err)
 	}
 
-	// Step 5: Create performance indexes
+	return nil
+}
+
+func (m *Migrator) createIndexesForMigration(opts *MigrateOptions) ([]string, error) {
 	var skippedIndexes []string
 	if !opts.SkipIndexes {
 		var err error
 		skippedIndexes, err = m.CreateIndexes()
 		if err != nil {
-			return fmt.Errorf("create indexes: %w", err)
+			return nil, fmt.Errorf("create indexes: %w", err)
 		}
 	} else if opts.Verbose {
 		log.Println("Step 5/7: Skipping performance index creation (SkipIndexes option enabled)")
 	}
 
-	// Step 6: Update statistics
+	return skippedIndexes, nil
+}
+
+func (m *Migrator) updateStatisticsWithWarning() {
 	if err := m.UpdateStatistics(); err != nil {
-		// Non-fatal error, just log warning
 		log.Printf("⚠️  Warning: Failed to update statistics: %v", err)
 	}
+}
 
-	// Step 7: Verify migration integrity
+func (m *Migrator) verifyMigrationWithLogging(opts *MigrateOptions, skippedIndexes []string) error {
 	if opts.Verbose {
 		log.Println("Step 7/7: Verifying migration integrity...")
 	}
@@ -88,28 +114,31 @@ func (m *Migrator) Migrate(opts *MigrateOptions) error {
 	status, err := m.VerifyMigration(opts, skippedIndexes)
 	if err != nil {
 		log.Printf("⚠️  Warning: Failed to verify migration: %v", err)
-	} else {
-		if opts.Verbose {
-			log.Println(status.Summary())
-		}
-
-		if !status.IsComplete() {
-			return fmt.Errorf("migration verification failed: missing components")
-		}
-
-		if status.HasIssues() {
-			log.Printf("⚠️  Warning: Migration completed with integrity issues:")
-			for _, issue := range status.Issues {
-				log.Printf("   - %s", issue)
-			}
-		}
+		return nil
 	}
 
 	if opts.Verbose {
-		log.Println("========== Migration Complete ==========")
+		log.Println(status.Summary())
+	}
+
+	if !status.IsComplete() {
+		return fmt.Errorf("migration verification failed: missing components")
+	}
+
+	if status.HasIssues() {
+		log.Printf("⚠️  Warning: Migration completed with integrity issues:")
+		for _, issue := range status.Issues {
+			log.Printf("   - %s", issue)
+		}
 	}
 
 	return nil
+}
+
+func (m *Migrator) logMigrationComplete(opts *MigrateOptions) {
+	if opts.Verbose {
+		log.Println("========== Migration Complete ==========")
+	}
 }
 
 // DropAllTables drops all tables in dependency order
@@ -301,16 +330,44 @@ func (m *Migrator) UpdateStatistics() error {
 	return nil
 }
 
+type indexResult struct {
+	IndexName string
+	IndexDef  string
+}
+
+type indexInfo struct {
+	TableName string
+	IndexName string
+	IndexDef  string
+	Columns   string
+}
+
 // VerifyMigration verifies that all expected tables and indexes exist
 func (m *Migrator) VerifyMigration(opts *MigrateOptions, skippedIndexes []string) (*MigrationStatus, error) {
 	status := &MigrationStatus{
 		Issues: []string{},
 	}
 
-	// Normalize inputs
+	skipSet := buildSkippedIndexSet(opts, skippedIndexes)
+	m.collectTableStatus(status)
+
+	indexMap, err := m.loadExistingIndexMap()
+	if err != nil {
+		return nil, err
+	}
+
+	collectExpectedIndexStatus(status, skipSet, indexMap)
+	m.checkDuplicateIndexes(status)
+	if err := m.collectExtensionStatus(status); err != nil {
+		return nil, err
+	}
+
+	return status, nil
+}
+
+func buildSkippedIndexSet(opts *MigrateOptions, skippedIndexes []string) map[string]struct{} {
 	skipSet := make(map[string]struct{})
 	if opts != nil && opts.SkipIndexes {
-		// All indexes are intentionally skipped for this run
 		for _, name := range expectedIndexesList() {
 			skipSet[name] = struct{}{}
 		}
@@ -318,25 +375,22 @@ func (m *Migrator) VerifyMigration(opts *MigrateOptions, skippedIndexes []string
 	for _, name := range skippedIndexes {
 		skipSet[name] = struct{}{}
 	}
+	return skipSet
+}
 
-	// Check tables
+func (m *Migrator) collectTableStatus(status *MigrationStatus) {
 	tables := []string{"words", "word_variants", "pronunciations", "senses", "examples"}
 	for _, table := range tables {
 		if m.db.Migrator().HasTable(table) {
 			status.Tables = append(status.Tables, table)
-		} else {
-			status.MissingTables = append(status.MissingTables, table)
+			continue
 		}
+		status.MissingTables = append(status.MissingTables, table)
 	}
+}
 
-	expectedIndexes := expectedIndexesList()
-
-	type IndexResult struct {
-		IndexName string
-		IndexDef  string
-	}
-
-	var existingIndexes []IndexResult
+func (m *Migrator) loadExistingIndexMap() (map[string]string, error) {
+	var existingIndexes []indexResult
 	if err := m.db.Raw(`
 		SELECT 
 			i.indexname AS index_name,
@@ -348,13 +402,16 @@ func (m *Migrator) VerifyMigration(opts *MigrateOptions, skippedIndexes []string
 		return nil, fmt.Errorf("query indexes: %w", err)
 	}
 
-	indexMap := make(map[string]string) // index_name -> index_def
+	indexMap := make(map[string]string)
 	for _, idx := range existingIndexes {
 		indexMap[idx.IndexName] = idx.IndexDef
 	}
 
-	for _, name := range expectedIndexes {
-		// Skip indexes intentionally skipped for this run
+	return indexMap, nil
+}
+
+func collectExpectedIndexStatus(status *MigrationStatus, skipSet map[string]struct{}, indexMap map[string]string) {
+	for _, name := range expectedIndexesList() {
 		if _, shouldSkip := skipSet[name]; shouldSkip {
 			status.SkippedIndexes = append(status.SkippedIndexes, name)
 			continue
@@ -374,16 +431,10 @@ func (m *Migrator) VerifyMigration(opts *MigrateOptions, skippedIndexes []string
 			status.MissingIndexes = append(status.MissingIndexes, name)
 		}
 	}
+}
 
-	// Check for duplicate B-tree indexes on hot columns
-	type IndexInfo struct {
-		TableName string
-		IndexName string
-		IndexDef  string
-		Columns   string
-	}
-
-	var allIndexes []IndexInfo
+func (m *Migrator) checkDuplicateIndexes(status *MigrationStatus) {
+	var allIndexes []indexInfo
 	if err := m.db.Raw(`
 		SELECT 
 			t.relname AS table_name,
@@ -401,54 +452,54 @@ func (m *Migrator) VerifyMigration(opts *MigrateOptions, skippedIndexes []string
 		GROUP BY t.relname, i.relname, i.oid, ix.indkey
 		ORDER BY t.relname, i.relname
 	`).Scan(&allIndexes).Error; err != nil {
-		// Non-fatal, just log warning
 		log.Printf("⚠️  Warning: Could not check for duplicate indexes: %v", err)
-	} else {
-		// Group indexes by table and column signature
-		type IndexGroup struct {
-			tableName string
-			columns   string
-		}
-		indexGroups := make(map[IndexGroup][]string)
-
-		for _, idx := range allIndexes {
-			// Skip GIN indexes and expression indexes
-			if strings.Contains(idx.IndexDef, "gin_trgm_ops") ||
-				strings.Contains(idx.IndexDef, "COALESCE") ||
-				strings.Contains(idx.IndexDef, "lower(") {
-				continue
-			}
-
-			key := IndexGroup{
-				tableName: idx.TableName,
-				columns:   idx.Columns,
-			}
-			indexGroups[key] = append(indexGroups[key], idx.IndexName)
-		}
-
-		for key, indexNames := range indexGroups {
-			if len(indexNames) > 1 {
-				status.Issues = append(status.Issues,
-					fmt.Sprintf("Duplicate B-tree indexes on %s(%s): %v",
-						key.tableName, key.columns, indexNames))
-			}
-		}
+		return
 	}
 
-	// Check extensions
-	type ExtResult struct {
+	type indexGroup struct {
+		tableName string
+		columns   string
+	}
+
+	indexGroups := make(map[indexGroup][]string)
+	for _, idx := range allIndexes {
+		if strings.Contains(idx.IndexDef, "gin_trgm_ops") ||
+			strings.Contains(idx.IndexDef, "COALESCE") ||
+			strings.Contains(idx.IndexDef, "lower(") {
+			continue
+		}
+
+		key := indexGroup{
+			tableName: idx.TableName,
+			columns:   idx.Columns,
+		}
+		indexGroups[key] = append(indexGroups[key], idx.IndexName)
+	}
+
+	for key, indexNames := range indexGroups {
+		if len(indexNames) <= 1 {
+			continue
+		}
+		status.Issues = append(status.Issues,
+			fmt.Sprintf("Duplicate B-tree indexes on %s(%s): %v",
+				key.tableName, key.columns, indexNames))
+	}
+}
+
+func (m *Migrator) collectExtensionStatus(status *MigrationStatus) error {
+	type extResult struct {
 		ExtName string
 	}
-	var extensions []ExtResult
+	var extensions []extResult
 	if err := m.db.Raw(`SELECT extname AS ext_name FROM pg_extension WHERE extname = 'pg_trgm'`).Scan(&extensions).Error; err != nil {
-		return nil, fmt.Errorf("query extensions: %w", err)
+		return fmt.Errorf("query extensions: %w", err)
 	}
 
 	if len(extensions) > 0 {
 		status.Extensions = append(status.Extensions, "pg_trgm")
 	}
 
-	return status, nil
+	return nil
 }
 
 // MigrationStatus represents the current migration state
@@ -477,36 +528,36 @@ func (s *MigrationStatus) Summary() string {
 	var sb strings.Builder
 
 	sb.WriteString("📊 Migration Status:\n")
-	sb.WriteString(fmt.Sprintf("  • Tables: %d/5 created, %d missing\n", len(s.Tables), len(s.MissingTables)))
-	sb.WriteString(fmt.Sprintf("  • Custom indexes: %d/6 created, %d missing\n", len(s.Indexes), len(s.MissingIndexes)))
-	sb.WriteString(fmt.Sprintf("  • Extensions: %d/1 enabled\n", len(s.Extensions)))
+	fmt.Fprintf(&sb, "  • Tables: %d/5 created, %d missing\n", len(s.Tables), len(s.MissingTables))
+	fmt.Fprintf(&sb, "  • Custom indexes: %d/6 created, %d missing\n", len(s.Indexes), len(s.MissingIndexes))
+	fmt.Fprintf(&sb, "  • Extensions: %d/1 enabled\n", len(s.Extensions))
 	sb.WriteString("  • Note: Basic B-tree indexes are auto-created by GORM\n")
 
 	if len(s.MissingTables) > 0 {
 		sb.WriteString("\n⚠️  Missing tables:\n")
 		for _, t := range s.MissingTables {
-			sb.WriteString(fmt.Sprintf("  - %s\n", t))
+			fmt.Fprintf(&sb, "  - %s\n", t)
 		}
 	}
 
 	if len(s.MissingIndexes) > 0 {
 		sb.WriteString("\n⚠️  Missing custom indexes:\n")
 		for _, i := range s.MissingIndexes {
-			sb.WriteString(fmt.Sprintf("  - %s\n", i))
+			fmt.Fprintf(&sb, "  - %s\n", i)
 		}
 	}
 
 	if len(s.SkippedIndexes) > 0 {
 		sb.WriteString("\nℹ️  Skipped indexes (not verified in this run):\n")
 		for _, i := range s.SkippedIndexes {
-			sb.WriteString(fmt.Sprintf("  - %s\n", i))
+			fmt.Fprintf(&sb, "  - %s\n", i)
 		}
 	}
 
 	if len(s.Issues) > 0 {
 		sb.WriteString("\n⚠️  Integrity issues:\n")
 		for _, issue := range s.Issues {
-			sb.WriteString(fmt.Sprintf("  - %s\n", issue))
+			fmt.Fprintf(&sb, "  - %s\n", issue)
 		}
 	}
 

@@ -10,11 +10,11 @@ Shared data models and utilities for English-Chinese dictionary applications.
 
 - **Database Models**: Complete schema for words, pronunciations, senses, examples, and variants
 - **API Response Structures**: Unified response format with error handling
-- **Text Normalization**: Smart case-folding that preserves apostrophes and slashes
+- **Text Normalization**: Lowercasing, space/hyphen/underscore removal, Unicode apostrophe normalization (apostrophes and slashes preserved)
 - **Standardized Enumerations**: POS (23 types), accents (10 types), CEFR levels, etc.
 - **Multi-source Support**: CEFR, Oxford, CET, word frequency, Collins ratings
 - **Database Migration**: Enterprise-grade PostgreSQL schema migration tools
-- **Full Test Coverage**: 100% coverage for all testable packages
+- **Well-tested Core Packages**: `model` and `textutil` have full statement coverage; `migration` currently has smoke-level coverage only
 
 ## Installation
 
@@ -73,12 +73,19 @@ textutil.ToNormalized("and/or")   // "and/or" (preserves slashes)
 response := model.WordResponse{
     ID:       1,
     Headword: "example",
+    WordAnnotations: model.WordAnnotations{
+        CEFRLevel:   "B1",
+        CETLevel:    4,
+        OxfordLevel: 1,
+    },
     // ... fields
 }
 
 successResponse := model.NewSuccessResponse(response)
 errorResponse := model.NewErrorResponse("NOT_FOUND", "Word not found", nil)
 ```
+
+Note: database models use integer enum codes for storage, while API response models expose canonical strings for some fields such as `cefr_level`.
 
 ## Package Structure
 
@@ -103,8 +110,8 @@ type Word struct {
     CETLevel           int
     OxfordLevel        int
     SchoolLevel        int
-    FrequencyRank      int
     FrequencyCount     int
+    FrequencyRank      int
     CollinsStars       int
     TranslationZH      string
 
@@ -167,10 +174,12 @@ type WordVariant struct {
     Kind               VariantKind  // 1=form, 2=alias
     FormType           *int         // 1=past, 2=past_participle, 5=plural, etc.
     Tags               []string     // Additional tags (PostgreSQL array)
-    FrequencyRank      int
     FrequencyCount     int
+    FrequencyRank      int
 }
 ```
+
+Note: the structs above are database models used by GORM. Response structs in `model/word.go` intentionally differ in some fields to provide API-friendly values.
 
 ## Enumerations
 
@@ -219,10 +228,13 @@ model.ParsePOS("verb")     // 2, true
 | 3 | B1 | 4 | B2 |
 | 5 | C1 | 6 | C2 |
 
+Database models store CEFR as integer codes. API response structs serialize CEFR as strings such as `"A1"`, `"B1"`, or `""` for unknown.
+
 ### Other Classifications
 
 - **Oxford**: 0=none, 1=Oxford 3000, 2=Oxford 5000
-- **CET**: 0=none, 1=CET-4, 2=CET-6
+- **CET (database model)**: 0=none, 1=CET-4, 2=CET-6
+- **CET (API response)**: commonly exposed as 0, 4, or 6 depending on upstream mapping
 - **Collins**: 0-5 stars (5 = most frequent)
 
 ## Model Relationships
@@ -239,12 +251,14 @@ Word
 
 ### ToNormalized
 
-Converts to lowercase, preserves apostrophes and slashes, removes other punctuation.
+Converts to lowercase, trims surrounding spaces, removes spaces/hyphens/underscores, preserves apostrophes and slashes, and normalizes common Unicode apostrophes to ASCII `'`.
 
 ```go
 textutil.ToNormalized("Example")  // "example"
 textutil.ToNormalized("I'm")      // "i'm"
 textutil.ToNormalized("and/or")   // "and/or"
+textutil.ToNormalized("it’s")     // "it's"
+textutil.ToNormalized("air-conditioning") // "airconditioning"
 ```
 
 ## Testing
@@ -310,10 +324,8 @@ All API endpoints use a unified response format:
     "data": null,
     "error": {
         "code": "NOT_FOUND",
-        "message": "Word not found",
-        "details": null
-    },
-    "meta": null
+        "message": "Word not found"
+    }
 }
 ```
 

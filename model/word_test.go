@@ -5,13 +5,18 @@ import (
 	"testing"
 )
 
+type topLevelFieldCheck struct {
+	key   string
+	value any
+}
+
 func TestWordAnnotationsEmbedding(t *testing.T) {
 	// Test that embedded WordAnnotations fields appear at the top level in JSON
 	resp := WordResponse{
 		ID:       123,
 		Headword: "test",
 		WordAnnotations: WordAnnotations{
-			CEFRLevel:      3,
+			CEFRLevel:      "B1",
 			CETLevel:       4,
 			OxfordLevel:    1,
 			SchoolLevel:    2,
@@ -33,48 +38,16 @@ func TestWordAnnotationsEmbedding(t *testing.T) {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
 
-	// Check that annotation fields are at the top level (not nested)
-	if _, ok := result["cefr_level"]; !ok {
-		t.Error("cefr_level should be at top level")
-	}
-	if _, ok := result["cet_level"]; !ok {
-		t.Error("cet_level should be at top level")
-	}
-	if _, ok := result["oxford_level"]; !ok {
-		t.Error("oxford_level should be at top level")
-	}
-	if _, ok := result["school_level"]; !ok {
-		t.Error("school_level should be at top level")
-	}
-	if _, ok := result["frequency_rank"]; !ok {
-		t.Error("frequency_rank should be at top level")
-	}
-	if _, ok := result["frequency_count"]; !ok {
-		t.Error("frequency_count should be at top level")
-	}
-	if _, ok := result["collins_stars"]; !ok {
-		t.Error("collins_stars should be at top level")
-	}
-	if _, ok := result["translation_zh"]; !ok {
-		t.Error("translation_zh should be at top level")
-	}
-
-	// Verify values
-	if int(result["cefr_level"].(float64)) != 3 {
-		t.Errorf("Expected cefr_level=3, got %v", result["cefr_level"])
-	}
-	if int(result["cet_level"].(float64)) != 4 {
-		t.Errorf("Expected cet_level=4, got %v", result["cet_level"])
-	}
-	if int(result["oxford_level"].(float64)) != 1 {
-		t.Errorf("Expected oxford_level=1, got %v", result["oxford_level"])
-	}
-	if int(result["collins_stars"].(float64)) != 3 {
-		t.Errorf("Expected collins_stars=3, got %v", result["collins_stars"])
-	}
-	if result["translation_zh"].(string) != "测试；考试" {
-		t.Errorf("Expected translation_zh='测试；考试', got %v", result["translation_zh"])
-	}
+	assertTopLevelFields(t, result,
+		topLevelFieldCheck{key: "cefr_level", value: "B1"},
+		topLevelFieldCheck{key: "cet_level", value: 4},
+		topLevelFieldCheck{key: "oxford_level", value: 1},
+		topLevelFieldCheck{key: "school_level", value: 2},
+		topLevelFieldCheck{key: "frequency_rank", value: 100},
+		topLevelFieldCheck{key: "frequency_count", value: 5000},
+		topLevelFieldCheck{key: "collins_stars", value: 3},
+		topLevelFieldCheck{key: "translation_zh", value: "测试；考试"},
+	)
 
 	t.Logf("JSON output: %s", string(jsonData))
 }
@@ -85,7 +58,7 @@ func TestSearchResultResponseEmbedding(t *testing.T) {
 		Headword: "example",
 		POS:      []string{"noun", "verb"},
 		WordAnnotations: WordAnnotations{
-			CEFRLevel:     2,
+			CEFRLevel:     "A2",
 			FrequencyRank: 500,
 		},
 	}
@@ -115,7 +88,7 @@ func TestSuggestResponseEmbedding(t *testing.T) {
 	resp := SuggestResponse{
 		Headword: "word",
 		WordAnnotations: WordAnnotations{
-			CEFRLevel:     1,
+			CEFRLevel:     "A1",
 			FrequencyRank: 50,
 			OxfordLevel:   1,
 		},
@@ -143,4 +116,71 @@ func TestSuggestResponseEmbedding(t *testing.T) {
 	}
 
 	t.Logf("JSON output: %s", string(jsonData))
+}
+
+func TestSenseResponseCEFRLevelSerialization(t *testing.T) {
+	resp := SenseResponse{
+		SenseID:      42,
+		POS:          "verb",
+		CEFRLevel:    "A2",
+		CEFRSource:   "oxford",
+		OxfordLevel:  1,
+		DefinitionEN: "to examine something",
+		DefinitionZH: "检查；审视",
+		SenseOrder:   2,
+	}
+
+	jsonData, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("Failed to marshal: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(jsonData, &result); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+
+	if _, ok := result["cefr_level"]; !ok {
+		t.Fatal("cefr_level should be present")
+	}
+	if _, ok := result["sense_id"]; !ok {
+		t.Fatal("sense_id should be present")
+	}
+	if result["cefr_level"].(string) != "A2" {
+		t.Errorf("Expected cefr_level=A2, got %v", result["cefr_level"])
+	}
+	if result["pos"].(string) != "verb" {
+		t.Errorf("Expected pos=verb, got %v", result["pos"])
+	}
+	if int(result["sense_id"].(float64)) != 42 {
+		t.Errorf("Expected sense_id=42, got %v", result["sense_id"])
+	}
+
+	t.Logf("JSON output: %s", string(jsonData))
+}
+
+func assertTopLevelFields(t *testing.T, result map[string]interface{}, checks ...topLevelFieldCheck) {
+	t.Helper()
+
+	for _, check := range checks {
+		actual, ok := result[check.key]
+		if !ok {
+			t.Errorf("%s should be at top level", check.key)
+			continue
+		}
+
+		switch expected := check.value.(type) {
+		case string:
+			if actualString, ok := actual.(string); !ok || actualString != expected {
+				t.Errorf("Expected %s=%v, got %v", check.key, expected, actual)
+			}
+		case int:
+			actualNumber, ok := actual.(float64)
+			if !ok || int(actualNumber) != expected {
+				t.Errorf("Expected %s=%v, got %v", check.key, expected, actual)
+			}
+		default:
+			t.Fatalf("unsupported expected type %T for key %s", check.value, check.key)
+		}
+	}
 }
