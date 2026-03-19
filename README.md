@@ -1,8 +1,7 @@
 # isdict-commons
 
-[![Go Version](https://img.shields.io/badge/go-1.24-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Test](https://github.com/simp-lee/isdict-commons/workflows/Test/badge.svg)](https://github.com/simp-lee/isdict-commons/actions)
 
 Shared data models and utilities for English-Chinese dictionary applications.
 
@@ -14,7 +13,7 @@ Shared data models and utilities for English-Chinese dictionary applications.
 - **Standardized Enumerations**: POS (23 types), accents (10 types), CEFR levels, etc.
 - **Multi-source Support**: CEFR, Oxford, CET, word frequency, Collins ratings
 - **Database Migration**: Enterprise-grade PostgreSQL schema migration tools
-- **Well-tested Core Packages**: `model` and `textutil` have full statement coverage; `migration` currently has smoke-level coverage only
+- **Well-tested Core Packages**: `model` and `textutil` have full statement coverage; `migration` has targeted verification tests plus opt-in PostgreSQL integration tests
 
 ## Installation
 
@@ -22,7 +21,7 @@ Shared data models and utilities for English-Chinese dictionary applications.
 go get github.com/simp-lee/isdict-commons@latest
 ```
 
-**Requirements:** Go 1.24+
+**Requirements:** Go 1.25+
 
 ## Quick Start
 
@@ -173,7 +172,7 @@ type WordVariant struct {
     HeadwordNormalized string
     Kind               VariantKind  // 1=form, 2=alias
     FormType           *int         // 1=past, 2=past_participle, 5=plural, etc.
-    Tags               []string     // Additional tags (PostgreSQL array)
+    Tags               pq.StringArray // Additional tags (PostgreSQL array)
     FrequencyCount     int
     FrequencyRank      int
 }
@@ -235,7 +234,10 @@ Database models store CEFR as integer codes. API response structs serialize CEFR
 - **Oxford**: 0=none, 1=Oxford 3000, 2=Oxford 5000
 - **CET (database model)**: 0=none, 1=CET-4, 2=CET-6
 - **CET (API response)**: commonly exposed as 0, 4, or 6 depending on upstream mapping
+- **SchoolLevel**: 0=unknown, 1=初中, 2=高中, 3=大学
 - **Collins**: 0-5 stars (5 = most frequent)
+
+SchoolLevel represents a recommended learning stage for Chinese English learners. It is a shared classification for downstream consumers and should not be interpreted as a precise textbook grade, an official curriculum mapping, or an exam label.
 
 ## Model Relationships
 
@@ -268,6 +270,12 @@ go test ./...           # Run all tests
 go test -cover ./...    # With coverage
 ```
 
+The migration package also includes opt-in PostgreSQL integration tests for real DB-path coverage. These tests are skipped unless `ISDICT_TEST_POSTGRES_DSN` is set.
+
+When enabling them, the DSN must point to a dedicated test database and must resolve both `current_schema()` and `search_path` to `public`. For example, include `options='-c search_path=public'` in the DSN if needed.
+
+The integration test setup performs destructive cleanup of the migration tables in the target database before and after each run, so never point `ISDICT_TEST_POSTGRES_DSN` at a shared, development, or production database.
+
 ## Database Migration
 
 The `migration` package provides tools for PostgreSQL schema migration:
@@ -289,7 +297,7 @@ migrator := migration.NewMigrator(db)
 err = migrator.Migrate(&migration.MigrateOptions{
     DropTables:     false,  // Don't drop existing tables
     SkipExtensions: false,  // Enable PostgreSQL extensions (pg_trgm)
-    SkipIndexes:    false,  // Create all indexes
+    SkipIndexes:    false,  // Create optional performance indexes; required unique indexes are still verified
     Verbose:        true,   // Enable detailed logging
 })
 ```
@@ -300,6 +308,10 @@ err = migrator.Migrate(&migration.MigrateOptions{
 - Custom unique constraints with NULL handling
 - GIN trigram indexes for performance
 - Migration verification and integrity checks
+
+When `SkipIndexes` is true, the migrator skips optional performance indexes such as trigram GIN indexes, but it still verifies required unique indexes like `idx_pronunciation_primary_unique` and `idx_word_variant_unique`.
+
+The migration integration tests use a real PostgreSQL database when `ISDICT_TEST_POSTGRES_DSN` is set. The test safety gate rejects targets that are not clearly test-only databases or that do not run in the `public` schema with `search_path=public`.
 
 ## API Response Structure
 

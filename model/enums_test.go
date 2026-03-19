@@ -206,6 +206,27 @@ func TestGetCEFRLevelName(t *testing.T) {
 	}
 }
 
+func TestGetSchoolLevelName(t *testing.T) {
+	tests := []struct {
+		code     int
+		expected string
+	}{
+		{0, "unknown"},
+		{1, "初中"},
+		{2, "高中"},
+		{3, "大学"},
+		{-1, "unknown"},
+		{999, "unknown"},
+	}
+
+	for _, tt := range tests {
+		result := GetSchoolLevelName(tt.code)
+		if result != tt.expected {
+			t.Errorf("GetSchoolLevelName(%d) = %s; want %s", tt.code, result, tt.expected)
+		}
+	}
+}
+
 func TestParseCEFRLevel(t *testing.T) {
 	tests := []struct {
 		name     string

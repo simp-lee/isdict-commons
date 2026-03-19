@@ -116,6 +116,14 @@ var CEFRCodeToName = map[int]string{
 	6: "C2",
 }
 
+// SchoolLevelCodeToName maps school level enum codes to recommendation stage names
+var SchoolLevelCodeToName = map[int]string{
+	0: "unknown",
+	1: "初中",
+	2: "高中",
+	3: "大学",
+}
+
 // CEFRNameToCode is the reverse mapping of CEFRCodeToName
 var CEFRNameToCode = makeReverseMap(CEFRCodeToName)
 
@@ -178,6 +186,14 @@ func GetCEFRLevelName(code int) string {
 		return name
 	}
 	return ""
+}
+
+// GetSchoolLevelName returns the recommendation stage name for a school level code.
+func GetSchoolLevelName(code int) string {
+	if name, ok := SchoolLevelCodeToName[code]; ok {
+		return name
+	}
+	return "unknown"
 }
 
 // ParseCEFRLevel converts a CEFR level name to its code

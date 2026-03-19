@@ -8,7 +8,7 @@ type WordAnnotations struct {
 	CEFRSource     string `json:"cefr_source,omitempty"`    // CEFR data source: "oxford", "cefrj", "both", or "" (empty if no CEFR data)
 	CETLevel       int    `json:"cet_level"`                // China College English Test (4=CET4, 6=CET6, 0=unknown)
 	OxfordLevel    int    `json:"oxford_level"`             // Oxford wordlist (1=Oxford3000, 2=Oxford5000, 0=unknown)
-	SchoolLevel    int    `json:"school_level"`             // Education level (0=unknown)
+	SchoolLevel    int    `json:"school_level"`             // Recommended learning stage for Chinese English learners (0=unknown, 1=初中, 2=高中, 3=大学)
 	FrequencyRank  int    `json:"frequency_rank"`           // Word frequency ranking (lower = more common, 0=unknown)
 	FrequencyCount int    `json:"frequency_count"`          // Raw frequency count (0=unknown)
 	CollinsStars   int    `json:"collins_stars"`            // Collins COBUILD star rating (1-5, 0=unknown)

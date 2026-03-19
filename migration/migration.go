@@ -3,12 +3,15 @@ package migration
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/simp-lee/isdict-commons/model"
 	"gorm.io/gorm"
 )
+
+var postgresTypeCastPattern = regexp.MustCompile(`::[a-z0-9_\.\[\]]+`)
 
 // Migrator handles database schema migrations
 type Migrator struct {
@@ -114,13 +117,17 @@ func (m *Migrator) verifyMigrationWithLogging(opts *MigrateOptions, skippedIndex
 	status, err := m.VerifyMigration(opts, skippedIndexes)
 	if err != nil {
 		log.Printf("⚠️  Warning: Failed to verify migration: %v", err)
-		return nil
+		return fmt.Errorf("verify migration: %w", err)
 	}
 
 	if opts.Verbose {
 		log.Println(status.Summary())
 	}
 
+	return m.handleMigrationVerificationStatus(status)
+}
+
+func (m *Migrator) handleMigrationVerificationStatus(status *MigrationStatus) error {
 	if !status.IsComplete() {
 		return fmt.Errorf("migration verification failed: missing components")
 	}
@@ -129,6 +136,10 @@ func (m *Migrator) verifyMigrationWithLogging(opts *MigrateOptions, skippedIndex
 		log.Printf("⚠️  Warning: Migration completed with integrity issues:")
 		for _, issue := range status.Issues {
 			log.Printf("   - %s", issue)
+		}
+
+		if requiredIssues := status.RequiredIndexIssues(); len(requiredIssues) > 0 {
+			return fmt.Errorf("migration verification failed: required index integrity issues: %s", strings.Join(requiredIssues, "; "))
 		}
 	}
 
@@ -304,18 +315,28 @@ func (m *Migrator) isTrigramIndexError(err error) bool {
 		strings.Contains(errMsg, "trgm")
 }
 
-// expectedIndexesList returns all custom indexes managed by the migrator
-func expectedIndexesList() []string {
+func requiredIndexesList() []string {
 	return []string{
-		// Custom unique constraints (2)
 		"idx_pronunciation_primary_unique",
 		"idx_word_variant_unique",
-		// Trigram indexes for fuzzy search (4)
+	}
+}
+
+func optionalPerformanceIndexesList() []string {
+	return []string{
 		"idx_words_headword_trgm",
 		"idx_words_phrase_lower_trgm",
 		"idx_word_variants_headword_trgm",
 		"idx_word_variants_phrase_lower_trgm",
 	}
+}
+
+// expectedIndexesList returns all custom indexes managed by the migrator
+func expectedIndexesList() []string {
+	indexes := make([]string, 0, len(requiredIndexesList())+len(optionalPerformanceIndexesList()))
+	indexes = append(indexes, requiredIndexesList()...)
+	indexes = append(indexes, optionalPerformanceIndexesList()...)
+	return indexes
 }
 
 // UpdateStatistics updates table statistics for query optimization
@@ -341,6 +362,16 @@ type indexInfo struct {
 	IndexDef  string
 	Columns   string
 }
+
+const loadExistingIndexMapQuery = `
+		SELECT
+			i.indexname AS index_name,
+			pg_get_indexdef(c.oid) AS index_def
+		FROM pg_indexes i
+		JOIN pg_namespace n ON n.nspname = i.schemaname
+		JOIN pg_class c ON c.relname = i.indexname AND c.relnamespace = n.oid
+		WHERE i.schemaname = 'public'
+	`
 
 // VerifyMigration verifies that all expected tables and indexes exist
 func (m *Migrator) VerifyMigration(opts *MigrateOptions, skippedIndexes []string) (*MigrationStatus, error) {
@@ -368,7 +399,7 @@ func (m *Migrator) VerifyMigration(opts *MigrateOptions, skippedIndexes []string
 func buildSkippedIndexSet(opts *MigrateOptions, skippedIndexes []string) map[string]struct{} {
 	skipSet := make(map[string]struct{})
 	if opts != nil && opts.SkipIndexes {
-		for _, name := range expectedIndexesList() {
+		for _, name := range optionalPerformanceIndexesList() {
 			skipSet[name] = struct{}{}
 		}
 	}
@@ -391,14 +422,7 @@ func (m *Migrator) collectTableStatus(status *MigrationStatus) {
 
 func (m *Migrator) loadExistingIndexMap() (map[string]string, error) {
 	var existingIndexes []indexResult
-	if err := m.db.Raw(`
-		SELECT 
-			i.indexname AS index_name,
-			pg_get_indexdef(c.oid) AS index_def
-		FROM pg_indexes i
-		JOIN pg_class c ON c.relname = i.indexname
-		WHERE i.schemaname = 'public'
-	`).Scan(&existingIndexes).Error; err != nil {
+	if err := m.db.Raw(loadExistingIndexMapQuery).Scan(&existingIndexes).Error; err != nil {
 		return nil, fmt.Errorf("query indexes: %w", err)
 	}
 
@@ -419,18 +443,166 @@ func collectExpectedIndexStatus(status *MigrationStatus, skipSet map[string]stru
 
 		if def, exists := indexMap[name]; exists {
 			status.Indexes = append(status.Indexes, name)
-
-			// Deep verification: Check idx_word_variant_unique uses COALESCE
-			if name == "idx_word_variant_unique" {
-				if !strings.Contains(strings.ToLower(def), "coalesce") {
-					status.Issues = append(status.Issues,
-						"idx_word_variant_unique does not use COALESCE expression (NULL handling incorrect)")
-				}
-			}
+			status.Issues = append(status.Issues, expectedIndexDefinitionIssues(name, def)...)
 		} else {
 			status.MissingIndexes = append(status.MissingIndexes, name)
 		}
 	}
+}
+
+func expectedIndexDefinitionIssues(name, def string) []string {
+	switch name {
+	case "idx_word_variant_unique":
+		compact := normalizeIndexDefinition(def)
+		if !strings.Contains(compact, "coalesce(") {
+			return []string{"idx_word_variant_unique does not use COALESCE expression (NULL handling incorrect)"}
+		}
+
+		if !isExpectedWordVariantUniqueIndexDefinition(compact) {
+			return []string{"idx_word_variant_unique is not the expected unique index on word_variants(word_id, variant_text, kind, COALESCE(form_type, 0))"}
+		}
+	case "idx_pronunciation_primary_unique":
+		compact := normalizeIndexDefinition(def)
+		if !strings.Contains(compact, "create unique index") ||
+			(!strings.Contains(compact, " on pronunciations") && !strings.Contains(compact, " on public.pronunciations")) ||
+			!strings.Contains(compact, "(word_id, accent)") ||
+			(!strings.Contains(compact, " where is_primary") && !strings.Contains(compact, " where (is_primary)")) {
+			return []string{"idx_pronunciation_primary_unique is not the expected partial unique index on pronunciations(word_id, accent) WHERE is_primary"}
+		}
+	}
+
+	return nil
+}
+
+func isExpectedWordVariantUniqueIndexDefinition(def string) bool {
+	if !strings.Contains(def, "create unique index") {
+		return false
+	}
+
+	if !strings.Contains(def, " on word_variants") && !strings.Contains(def, " on public.word_variants") {
+		return false
+	}
+
+	columns, ok := extractIndexColumns(def)
+	if !ok || len(columns) != 4 {
+		return false
+	}
+
+	if normalizeIdentifierExpression(columns[0]) != "word_id" ||
+		normalizeIdentifierExpression(columns[1]) != "variant_text" ||
+		normalizeIdentifierExpression(columns[2]) != "kind" {
+		return false
+	}
+
+	return isExpectedWordVariantCoalesceExpression(columns[3])
+}
+
+func extractIndexColumns(def string) ([]string, bool) {
+	start := strings.Index(def, "(")
+	if start == -1 {
+		return nil, false
+	}
+
+	depth := 0
+	for i := start; i < len(def); i++ {
+		switch def[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				if strings.TrimSpace(def[i+1:]) != "" {
+					return nil, false
+				}
+				return splitTopLevelCSV(def[start+1 : i]), true
+			}
+		}
+	}
+
+	return nil, false
+}
+
+func splitTopLevelCSV(value string) []string {
+	parts := make([]string, 0, 4)
+	start := 0
+	depth := 0
+
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case ',':
+			if depth == 0 {
+				parts = append(parts, strings.TrimSpace(value[start:i]))
+				start = i + 1
+			}
+		}
+	}
+
+	parts = append(parts, strings.TrimSpace(value[start:]))
+	return parts
+}
+
+func normalizeIdentifierExpression(value string) string {
+	return stripWrappingParens(strings.TrimSpace(value))
+}
+
+func isExpectedWordVariantCoalesceExpression(value string) bool {
+	normalized := stripWrappingParens(strings.TrimSpace(value))
+	normalized = postgresTypeCastPattern.ReplaceAllString(normalized, "")
+	normalized = stripWrappingParens(normalized)
+
+	if !strings.HasPrefix(normalized, "coalesce(") || !strings.HasSuffix(normalized, ")") {
+		return false
+	}
+
+	args := splitTopLevelCSV(normalized[len("coalesce(") : len(normalized)-1])
+	if len(args) != 2 {
+		return false
+	}
+
+	return stripWrappingParens(args[0]) == "form_type" && stripWrappingParens(args[1]) == "0"
+}
+
+func stripWrappingParens(value string) string {
+	trimmed := strings.TrimSpace(value)
+	for len(trimmed) >= 2 && trimmed[0] == '(' && trimmed[len(trimmed)-1] == ')' {
+		depth := 0
+		balanced := true
+		for i := 0; i < len(trimmed); i++ {
+			switch trimmed[i] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 && i != len(trimmed)-1 {
+					balanced = false
+				}
+			}
+			if depth < 0 {
+				balanced = false
+				break
+			}
+		}
+
+		if !balanced || depth != 0 {
+			break
+		}
+
+		trimmed = strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+	}
+
+	return trimmed
+}
+
+func normalizeIndexDefinition(def string) string {
+	normalized := strings.ToLower(def)
+	normalized = strings.ReplaceAll(normalized, "\n", " ")
+	normalized = strings.ReplaceAll(normalized, "\t", " ")
+	normalized = strings.ReplaceAll(normalized, "\"", "")
+	return strings.Join(strings.Fields(normalized), " ")
 }
 
 func (m *Migrator) checkDuplicateIndexes(status *MigrationStatus) {
@@ -521,6 +693,23 @@ func (s *MigrationStatus) IsComplete() bool {
 // HasIssues returns true if any integrity issues were found
 func (s *MigrationStatus) HasIssues() bool {
 	return len(s.Issues) > 0
+}
+
+// RequiredIndexIssues returns integrity issues for required indexes that must fail migration.
+func (s *MigrationStatus) RequiredIndexIssues() []string {
+	requiredNames := requiredIndexesList()
+	issues := make([]string, 0)
+
+	for _, issue := range s.Issues {
+		for _, name := range requiredNames {
+			if strings.Contains(issue, name) {
+				issues = append(issues, issue)
+				break
+			}
+		}
+	}
+
+	return issues
 }
 
 // Summary returns a human-readable summary
