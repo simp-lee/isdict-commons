@@ -1,215 +1,583 @@
 package model
 
-// PosCodeToName maps database POS enum values to canonical names
-var PosCodeToName = map[int]string{
-	0:  "unknown",
-	1:  "noun",
-	2:  "verb",
-	3:  "adjective",
-	4:  "adverb",
-	5:  "pronoun",
-	6:  "preposition",
-	7:  "conjunction",
-	8:  "article",
-	9:  "interjection",
-	10: "determiner",
-	11: "numeral",
-	12: "modal",
-	13: "auxiliary",
-	14: "particle",
-	15: "phrasal_verb",
-	16: "idiom",
-	17: "abbreviation",
-	18: "character",
-	19: "affix",
-	20: "contraction",
-	21: "punctuation",
-	22: "postposition",
-}
+import "maps"
 
-// FormTypeMapping maps form type tags to database enum values
-var FormTypeMapping = map[string]int{
-	"past":                  1, // FormPast
-	"past_tense":            1, // FormPast
-	"preterite":             1, // FormPast
-	"past_participle":       2, // FormPastParticiple
-	"past_part":             2, // FormPastParticiple
-	"present_3rd":           3, // FormPresent3rd
-	"3rd_person_singular":   3, // FormPresent3rd
-	"third_person_singular": 3, // FormPresent3rd
-	"gerund":                4, // FormGerund
-	"present_participle":    4, // FormGerund
-	"ing_form":              4, // FormGerund
-	"plural":                5, // FormPlural
-	"comparative":           6, // FormComparative
-	"superlative":           7, // FormSuperlative
-	"possessive":            8, // FormPossessive
-	"genitive":              8, // FormPossessive
-	"infinitive":            9, // FormInfinitive
-	"to_infinitive":         9, // FormInfinitive
-}
+const (
+	POSNoun         = "noun"
+	POSVerb         = "verb"
+	POSAdjective    = "adjective"
+	POSAdverb       = "adverb"
+	POSPronoun      = "pronoun"
+	POSPreposition  = "preposition"
+	POSConjunction  = "conjunction"
+	POSArticle      = "article"
+	POSInterjection = "interjection"
+	POSDeterminer   = "determiner"
+	POSNumber       = "number"
+	POSParticle     = "particle"
+	POSPhrasalVerb  = "phrasal_verb"
+	POSPhrase       = "phrase"
+	POSAbbreviation = "abbreviation"
+	POSSymbol       = "symbol"
+	POSName         = "name"
+	POSProverb      = "proverb"
+	POSCharacter    = "character"
+	POSAffix        = "affix"
+	POSContraction  = "contraction"
+	POSPunctuation  = "punctuation"
+	POSPostposition = "postposition"
+)
 
-// FormTypeCodeToName maps form type enum codes to their canonical names
-var FormTypeCodeToName = map[int]string{
-	1: "past",
-	2: "past_participle",
-	3: "present_3rd",
-	4: "gerund",
-	5: "plural",
-	6: "comparative",
-	7: "superlative",
-	8: "possessive",
-	9: "infinitive",
-}
+const (
+	AccentUnknown       = "unknown"
+	AccentBritish       = "british"
+	AccentAmerican      = "american"
+	AccentAustralian    = "australian"
+	AccentCanadian      = "canadian"
+	AccentIrish         = "irish"
+	AccentScottish      = "scottish"
+	AccentNZ            = "nz"
+	AccentIndian        = "indian"
+	AccentSouthAfrican  = "south_african"
+	AccentOtherRegional = "other"
+)
 
-// VariantKindToName maps variant kind enum codes to their canonical names
-var VariantKindToName = map[int]string{
-	int(VariantForm):  "form",
-	int(VariantAlias): "alias",
-}
+const (
+	LabelTypeGrammar  = "grammar"
+	LabelTypeRegister = "register"
+	LabelTypeRegion   = "region"
+	LabelTypeTemporal = "temporal"
+	LabelTypeDomain   = "domain"
+	LabelTypeAttitude = "attitude"
+)
 
-// AccentCodeToName maps accent codes to lowercase names (for API consistency)
-var AccentCodeToName = map[int]string{
-	0:  "unknown",
-	1:  "british",
-	2:  "american",
-	3:  "australian",
-	4:  "newzealand",
-	5:  "canadian",
-	6:  "irish",
-	7:  "scottish",
-	8:  "indian",
-	9:  "southafrican",
-	10: "other",
-}
+const (
+	GrammarLabelTransitive     = "transitive"
+	GrammarLabelIntransitive   = "intransitive"
+	GrammarLabelDitransitive   = "ditransitive"
+	GrammarLabelAmbitransitive = "ambitransitive"
+	GrammarLabelCountable      = "countable"
+	GrammarLabelUncountable    = "uncountable"
+	GrammarLabelPluralOnly     = "plural-only"
+	GrammarLabelSingularOnly   = "singular-only"
+	GrammarLabelAttributive    = "attributive"
+	GrammarLabelPredicative    = "predicative"
+	GrammarLabelInThePlural    = "in-the-plural"
+)
 
-// PosNameToCode is the reverse mapping of PosCodeToName (for API query parameter parsing)
-var PosNameToCode = makeReverseMap(PosCodeToName)
+const (
+	RegisterLabelFormal      = "formal"
+	RegisterLabelInformal    = "informal"
+	RegisterLabelSlang       = "slang"
+	RegisterLabelLiterary    = "literary"
+	RegisterLabelPoetic      = "poetic"
+	RegisterLabelVulgar      = "vulgar"
+	RegisterLabelTaboo       = "taboo"
+	RegisterLabelFigurative  = "figurative"
+	RegisterLabelIdiomatic   = "idiomatic"
+	RegisterLabelByExtension = "by-extension"
+	RegisterLabelEuphemistic = "euphemistic"
+)
 
-// AccentNameToCode is the reverse mapping of AccentCodeToName (for API query parameter parsing)
-var AccentNameToCode = makeReverseMap(AccentCodeToName)
+const (
+	RegionLabelUS          = "US"
+	RegionLabelUK          = "UK"
+	RegionLabelAustralia   = "Australia"
+	RegionLabelCanada      = "Canada"
+	RegionLabelNewZealand  = "New-Zealand"
+	RegionLabelIreland     = "Ireland"
+	RegionLabelScotland    = "Scotland"
+	RegionLabelIndia       = "India"
+	RegionLabelSingapore   = "Singapore"
+	RegionLabelSouthAfrica = "South-Africa"
+)
 
-// makeReverseMap creates a reverse mapping from name to code
-func makeReverseMap(forward map[int]string) map[string]int {
-	reverse := make(map[string]int, len(forward))
-	for code, name := range forward {
-		reverse[name] = code
+const (
+	TemporalLabelArchaic    = "archaic"
+	TemporalLabelDated      = "dated"
+	TemporalLabelObsolete   = "obsolete"
+	TemporalLabelRare       = "rare"
+	TemporalLabelHistorical = "historical"
+)
+
+const (
+	DomainLabelMedicine     = "medicine"
+	DomainLabelLaw          = "law"
+	DomainLabelComputing    = "computing"
+	DomainLabelFinance      = "finance"
+	DomainLabelBusiness     = "business"
+	DomainLabelMusic        = "music"
+	DomainLabelSports       = "sports"
+	DomainLabelBiology      = "biology"
+	DomainLabelChemistry    = "chemistry"
+	DomainLabelPhysics      = "physics"
+	DomainLabelEngineering  = "engineering"
+	DomainLabelMathematics  = "mathematics"
+	DomainLabelBotany       = "botany"
+	DomainLabelZoology      = "zoology"
+	DomainLabelLinguistics  = "linguistics"
+	DomainLabelMilitary     = "military"
+	DomainLabelArchitecture = "architecture"
+	DomainLabelReligion     = "religion"
+	DomainLabelPolitics     = "politics"
+	DomainLabelCooking      = "cooking"
+)
+
+const (
+	AttitudeLabelDerogatory   = "derogatory"
+	AttitudeLabelOffensive    = "offensive"
+	AttitudeLabelHumorous     = "humorous"
+	AttitudeLabelApproving    = "approving"
+	AttitudeLabelDisapproving = "disapproving"
+)
+
+const (
+	RelationTypeSynonym = "synonym"
+	RelationTypeAntonym = "antonym"
+	RelationTypeDerived = "derived"
+)
+
+const (
+	RelationKindForm  = "form"
+	RelationKindAlias = "alias"
+)
+
+const (
+	ImportRunStatusRunning   = "running"
+	ImportRunStatusCompleted = "completed"
+	ImportRunStatusFailed    = "failed"
+)
+
+const (
+	CEFRSourceNone   = ""
+	CEFRSourceOxford = "oxford"
+	CEFRSourceCEFRJ  = "cefrj"
+	CEFRSourceBoth   = "both"
+)
+
+const (
+	CEFRLevelUnknown int16 = 0
+	CEFRLevelA1      int16 = 1
+	CEFRLevelA2      int16 = 2
+	CEFRLevelB1      int16 = 3
+	CEFRLevelB2      int16 = 4
+	CEFRLevelC1      int16 = 5
+	CEFRLevelC2      int16 = 6
+)
+
+const (
+	OxfordLevelUnknown int16 = 0
+	OxfordLevel3000    int16 = 1
+	OxfordLevel5000    int16 = 2
+)
+
+const (
+	CETLevelUnknown int16 = 0
+	CETLevel4       int16 = 1
+	CETLevel6       int16 = 2
+)
+
+const (
+	SchoolLevelUnknown      int16 = 0
+	SchoolLevelMiddleSchool int16 = 1
+	SchoolLevelHighSchool   int16 = 2
+	SchoolLevelUniversity   int16 = 3
+)
+
+const (
+	CollinsStarsUnknown int16 = 0
+	CollinsOneStar      int16 = 1
+	CollinsTwoStars     int16 = 2
+	CollinsThreeStars   int16 = 3
+	CollinsFourStars    int16 = 4
+	CollinsFiveStars    int16 = 5
+)
+
+var (
+	posCodeToName = map[string]string{
+		POSNoun:         "Noun",
+		POSVerb:         "Verb",
+		POSAdjective:    "Adjective",
+		POSAdverb:       "Adverb",
+		POSPronoun:      "Pronoun",
+		POSPreposition:  "Preposition",
+		POSConjunction:  "Conjunction",
+		POSArticle:      "Article",
+		POSInterjection: "Interjection",
+		POSDeterminer:   "Determiner",
+		POSNumber:       "Number",
+		POSParticle:     "Particle",
+		POSPhrasalVerb:  "Phrasal Verb",
+		POSPhrase:       "Phrase",
+		POSAbbreviation: "Abbreviation",
+		POSSymbol:       "Symbol",
+		POSName:         "Name",
+		POSProverb:      "Proverb",
+		POSCharacter:    "Character",
+		POSAffix:        "Affix",
+		POSContraction:  "Contraction",
+		POSPunctuation:  "Punctuation",
+		POSPostposition: "Postposition",
 	}
-	return reverse
-}
+	posNameToCode = invertStringMap(posCodeToName)
+	validPOSCodes = keySet(posCodeToName)
 
-// OxfordLevelCodeToName maps Oxford level enum codes to their canonical names
-var OxfordLevelCodeToName = map[int]string{
-	0: "",
-	1: "Oxford 3000",
-	2: "Oxford 5000",
-}
-
-// CEFRCodeToName maps CEFR level enum codes to their canonical names
-var CEFRCodeToName = map[int]string{
-	0: "",
-	1: "A1",
-	2: "A2",
-	3: "B1",
-	4: "B2",
-	5: "C1",
-	6: "C2",
-}
-
-// SchoolLevelCodeToName maps school level enum codes to recommendation stage names
-var SchoolLevelCodeToName = map[int]string{
-	0: "unknown",
-	1: "初中",
-	2: "高中",
-	3: "大学",
-}
-
-// CEFRNameToCode is the reverse mapping of CEFRCodeToName
-var CEFRNameToCode = makeReverseMap(CEFRCodeToName)
-
-// GetPOSName returns the canonical name for a POS code
-func GetPOSName(code int) string {
-	if name, ok := PosCodeToName[code]; ok {
-		return name
+	accentCodeToName = map[string]string{
+		AccentUnknown:       "Unknown",
+		AccentBritish:       "British (RP)",
+		AccentAmerican:      "American (GA)",
+		AccentAustralian:    "Australian",
+		AccentCanadian:      "Canadian",
+		AccentIrish:         "Irish",
+		AccentScottish:      "Scottish",
+		AccentNZ:            "New Zealand",
+		AccentIndian:        "Indian",
+		AccentSouthAfrican:  "South African",
+		AccentOtherRegional: "Other Regional",
 	}
-	return "unknown"
-}
+	accentNameToCode = invertStringMap(accentCodeToName)
 
-// GetAccentName returns the canonical name for an accent code
-func GetAccentName(code int) string {
-	if name, ok := AccentCodeToName[code]; ok {
-		return name
+	labelTypeCodeToName = map[string]string{
+		LabelTypeGrammar:  "Grammar",
+		LabelTypeRegister: "Register",
+		LabelTypeRegion:   "Region",
+		LabelTypeTemporal: "Temporal",
+		LabelTypeDomain:   "Domain",
+		LabelTypeAttitude: "Attitude",
 	}
-	return "unknown"
-}
+	labelTypeNameToCode = invertStringMap(labelTypeCodeToName)
+	validLabelTypes     = keySet(labelTypeCodeToName)
 
-// GetFormTypeName returns the canonical name for a form type code
-func GetFormTypeName(code int) string {
-	if name, ok := FormTypeCodeToName[code]; ok {
-		return name
+	labelCodeToNameByType = map[string]map[string]string{
+		LabelTypeGrammar: {
+			GrammarLabelTransitive:     "Transitive",
+			GrammarLabelIntransitive:   "Intransitive",
+			GrammarLabelDitransitive:   "Ditransitive",
+			GrammarLabelAmbitransitive: "Ambitransitive",
+			GrammarLabelCountable:      "Countable",
+			GrammarLabelUncountable:    "Uncountable",
+			GrammarLabelPluralOnly:     "Plural Only",
+			GrammarLabelSingularOnly:   "Singular Only",
+			GrammarLabelAttributive:    "Attributive",
+			GrammarLabelPredicative:    "Predicative",
+			GrammarLabelInThePlural:    "In The Plural",
+		},
+		LabelTypeRegister: {
+			RegisterLabelFormal:      "Formal",
+			RegisterLabelInformal:    "Informal",
+			RegisterLabelSlang:       "Slang",
+			RegisterLabelLiterary:    "Literary",
+			RegisterLabelPoetic:      "Poetic",
+			RegisterLabelVulgar:      "Vulgar",
+			RegisterLabelTaboo:       "Taboo",
+			RegisterLabelFigurative:  "Figurative",
+			RegisterLabelIdiomatic:   "Idiomatic",
+			RegisterLabelByExtension: "By Extension",
+			RegisterLabelEuphemistic: "Euphemistic",
+		},
+		LabelTypeRegion: {
+			RegionLabelUS:          "US",
+			RegionLabelUK:          "UK",
+			RegionLabelAustralia:   "Australia",
+			RegionLabelCanada:      "Canada",
+			RegionLabelNewZealand:  "New Zealand",
+			RegionLabelIreland:     "Ireland",
+			RegionLabelScotland:    "Scotland",
+			RegionLabelIndia:       "India",
+			RegionLabelSingapore:   "Singapore",
+			RegionLabelSouthAfrica: "South Africa",
+		},
+		LabelTypeTemporal: {
+			TemporalLabelArchaic:    "Archaic",
+			TemporalLabelDated:      "Dated",
+			TemporalLabelObsolete:   "Obsolete",
+			TemporalLabelRare:       "Rare",
+			TemporalLabelHistorical: "Historical",
+		},
+		LabelTypeDomain: {
+			DomainLabelMedicine:     "Medicine",
+			DomainLabelLaw:          "Law",
+			DomainLabelComputing:    "Computing",
+			DomainLabelFinance:      "Finance",
+			DomainLabelBusiness:     "Business",
+			DomainLabelMusic:        "Music",
+			DomainLabelSports:       "Sports",
+			DomainLabelBiology:      "Biology",
+			DomainLabelChemistry:    "Chemistry",
+			DomainLabelPhysics:      "Physics",
+			DomainLabelEngineering:  "Engineering",
+			DomainLabelMathematics:  "Mathematics",
+			DomainLabelBotany:       "Botany",
+			DomainLabelZoology:      "Zoology",
+			DomainLabelLinguistics:  "Linguistics",
+			DomainLabelMilitary:     "Military",
+			DomainLabelArchitecture: "Architecture",
+			DomainLabelReligion:     "Religion",
+			DomainLabelPolitics:     "Politics",
+			DomainLabelCooking:      "Cooking",
+		},
+		LabelTypeAttitude: {
+			AttitudeLabelDerogatory:   "Derogatory",
+			AttitudeLabelOffensive:    "Offensive",
+			AttitudeLabelHumorous:     "Humorous",
+			AttitudeLabelApproving:    "Approving",
+			AttitudeLabelDisapproving: "Disapproving",
+		},
 	}
-	return ""
-}
+	labelNameToCodeByType = invertNestedStringMap(labelCodeToNameByType)
+	validLabelCodesByType = nestedKeySet(labelCodeToNameByType)
 
-// GetVariantKindName returns the canonical name for a variant kind code
-func GetVariantKindName(code int) string {
-	if name, ok := VariantKindToName[code]; ok {
-		return name
+	relationTypeCodeToName = map[string]string{
+		RelationTypeSynonym: "Synonym",
+		RelationTypeAntonym: "Antonym",
+		RelationTypeDerived: "Derived",
 	}
-	return "unknown"
-}
+	relationTypeNameToCode = invertStringMap(relationTypeCodeToName)
 
-// ParsePOS converts a POS name to its code
-func ParsePOS(name string) (int, bool) {
-	code, ok := PosNameToCode[name]
-	return code, ok
-}
-
-// ParseAccent converts an accent name to its code
-func ParseAccent(name string) (int, bool) {
-	code, ok := AccentNameToCode[name]
-	return code, ok
-}
-
-// GetOxfordLevelName returns the canonical name for an Oxford level code
-func GetOxfordLevelName(code int) string {
-	if name, ok := OxfordLevelCodeToName[code]; ok {
-		return name
+	relationKindCodeToName = map[string]string{
+		RelationKindForm:  "Form",
+		RelationKindAlias: "Alias",
 	}
-	return ""
-}
+	relationKindNameToCode = invertStringMap(relationKindCodeToName)
 
-// GetCEFRLevelName returns the canonical name for a CEFR level code.
-// Returns "" for unknown codes (suitable for JSON where unknown = empty).
-func GetCEFRLevelName(code int) string {
-	if name, ok := CEFRCodeToName[code]; ok {
-		return name
+	importRunStatusCodeToName = map[string]string{
+		ImportRunStatusRunning:   "Running",
+		ImportRunStatusCompleted: "Completed",
+		ImportRunStatusFailed:    "Failed",
 	}
-	return ""
-}
+	importRunStatusNameToCode = invertStringMap(importRunStatusCodeToName)
 
-// GetSchoolLevelName returns the recommendation stage name for a school level code.
-func GetSchoolLevelName(code int) string {
-	if name, ok := SchoolLevelCodeToName[code]; ok {
-		return name
+	cefrSourceCodeToName = map[string]string{
+		CEFRSourceNone:   "None",
+		CEFRSourceOxford: "Oxford",
+		CEFRSourceCEFRJ:  "CEFR-J",
+		CEFRSourceBoth:   "Both",
 	}
-	return "unknown"
-}
+	cefrSourceNameToCode = invertStringMap(cefrSourceCodeToName)
 
-// ParseCEFRLevel converts a CEFR level name to its code
-func ParseCEFRLevel(name string) (int, bool) {
-	code, ok := CEFRNameToCode[name]
-	return code, ok
-}
-
-// OxfordLevelFromString converts oxford source string to level code
-func OxfordLevelFromString(source string) int {
-	switch source {
-	case "oxford_3000":
-		return 1
-	case "oxford_5000":
-		return 2
-	default:
-		return 0
+	cefrLevelCodeToName = map[int16]string{
+		CEFRLevelUnknown: "unknown",
+		CEFRLevelA1:      "A1",
+		CEFRLevelA2:      "A2",
+		CEFRLevelB1:      "B1",
+		CEFRLevelB2:      "B2",
+		CEFRLevelC1:      "C1",
+		CEFRLevelC2:      "C2",
 	}
+	cefrLevelNameToCode = invertInt16Map(cefrLevelCodeToName)
+
+	oxfordLevelCodeToName = map[int16]string{
+		OxfordLevelUnknown: "unknown",
+		OxfordLevel3000:    "Oxford 3000",
+		OxfordLevel5000:    "Oxford 5000",
+	}
+	oxfordLevelNameToCode = invertInt16Map(oxfordLevelCodeToName)
+
+	cetLevelCodeToName = map[int16]string{
+		CETLevelUnknown: "unknown",
+		CETLevel4:       "CET-4",
+		CETLevel6:       "CET-6",
+	}
+	cetLevelNameToCode = invertInt16Map(cetLevelCodeToName)
+
+	schoolLevelCodeToName = map[int16]string{
+		SchoolLevelUnknown:      "unknown",
+		SchoolLevelMiddleSchool: "初中",
+		SchoolLevelHighSchool:   "高中",
+		SchoolLevelUniversity:   "大学",
+	}
+	schoolLevelNameToCode = invertInt16Map(schoolLevelCodeToName)
+
+	collinsStarsCodeToName = map[int16]string{
+		CollinsStarsUnknown: "unknown",
+		CollinsOneStar:      "1 Star",
+		CollinsTwoStars:     "2 Stars",
+		CollinsThreeStars:   "3 Stars",
+		CollinsFourStars:    "4 Stars",
+		CollinsFiveStars:    "5 Stars",
+	}
+	collinsStarsNameToCode = invertInt16Map(collinsStarsCodeToName)
+)
+
+// The exported accessors below return defensive copies so callers cannot mutate
+// the frozen controlled vocabularies held by this package.
+func POSCodeToName() map[string]string {
+	return cloneMap(posCodeToName)
+}
+
+func POSNameToCode() map[string]string {
+	return cloneMap(posNameToCode)
+}
+
+func ValidPOSCodes() map[string]struct{} {
+	return cloneMap(validPOSCodes)
+}
+
+func AccentCodeToName() map[string]string {
+	return cloneMap(accentCodeToName)
+}
+
+func AccentNameToCode() map[string]string {
+	return cloneMap(accentNameToCode)
+}
+
+func LabelTypeCodeToName() map[string]string {
+	return cloneMap(labelTypeCodeToName)
+}
+
+func LabelTypeNameToCode() map[string]string {
+	return cloneMap(labelTypeNameToCode)
+}
+
+func ValidLabelTypes() map[string]struct{} {
+	return cloneMap(validLabelTypes)
+}
+
+func LabelCodeToNameByType() map[string]map[string]string {
+	return cloneNestedStringMap(labelCodeToNameByType)
+}
+
+func LabelNameToCodeByType() map[string]map[string]string {
+	return cloneNestedStringMap(labelNameToCodeByType)
+}
+
+func ValidLabelCodesByType() map[string]map[string]struct{} {
+	return cloneNestedStringSet(validLabelCodesByType)
+}
+
+func RelationTypeCodeToName() map[string]string {
+	return cloneMap(relationTypeCodeToName)
+}
+
+func RelationTypeNameToCode() map[string]string {
+	return cloneMap(relationTypeNameToCode)
+}
+
+func RelationKindCodeToName() map[string]string {
+	return cloneMap(relationKindCodeToName)
+}
+
+func RelationKindNameToCode() map[string]string {
+	return cloneMap(relationKindNameToCode)
+}
+
+func ImportRunStatusCodeToName() map[string]string {
+	return cloneMap(importRunStatusCodeToName)
+}
+
+func ImportRunStatusNameToCode() map[string]string {
+	return cloneMap(importRunStatusNameToCode)
+}
+
+func CEFRSourceCodeToName() map[string]string {
+	return cloneMap(cefrSourceCodeToName)
+}
+
+func CEFRSourceNameToCode() map[string]string {
+	return cloneMap(cefrSourceNameToCode)
+}
+
+func CEFRLevelCodeToName() map[int16]string {
+	return cloneMap(cefrLevelCodeToName)
+}
+
+func CEFRLevelNameToCode() map[string]int16 {
+	return cloneMap(cefrLevelNameToCode)
+}
+
+func OxfordLevelCodeToName() map[int16]string {
+	return cloneMap(oxfordLevelCodeToName)
+}
+
+func OxfordLevelNameToCode() map[string]int16 {
+	return cloneMap(oxfordLevelNameToCode)
+}
+
+func CETLevelCodeToName() map[int16]string {
+	return cloneMap(cetLevelCodeToName)
+}
+
+func CETLevelNameToCode() map[string]int16 {
+	return cloneMap(cetLevelNameToCode)
+}
+
+func SchoolLevelCodeToName() map[int16]string {
+	return cloneMap(schoolLevelCodeToName)
+}
+
+func SchoolLevelNameToCode() map[string]int16 {
+	return cloneMap(schoolLevelNameToCode)
+}
+
+func CollinsStarsCodeToName() map[int16]string {
+	return cloneMap(collinsStarsCodeToName)
+}
+
+func CollinsStarsNameToCode() map[string]int16 {
+	return cloneMap(collinsStarsNameToCode)
+}
+
+func keySet(values map[string]string) map[string]struct{} {
+	set := make(map[string]struct{}, len(values))
+	for value := range values {
+		set[value] = struct{}{}
+	}
+	return set
+}
+
+func nestedKeySet(groups map[string]map[string]string) map[string]map[string]struct{} {
+	set := make(map[string]map[string]struct{}, len(groups))
+	for group, values := range groups {
+		set[group] = keySet(values)
+	}
+	return set
+}
+
+func cloneMap[K comparable, V any](source map[K]V) map[K]V {
+	clone := make(map[K]V, len(source))
+	maps.Copy(clone, source)
+
+	return clone
+}
+
+func cloneNestedStringMap(source map[string]map[string]string) map[string]map[string]string {
+	clone := make(map[string]map[string]string, len(source))
+	for key, values := range source {
+		clone[key] = cloneMap(values)
+	}
+
+	return clone
+}
+
+func cloneNestedStringSet(source map[string]map[string]struct{}) map[string]map[string]struct{} {
+	clone := make(map[string]map[string]struct{}, len(source))
+	for key, values := range source {
+		clone[key] = cloneMap(values)
+	}
+
+	return clone
+}
+
+func invertStringMap(values map[string]string) map[string]string {
+	inverted := make(map[string]string, len(values))
+	for code, name := range values {
+		inverted[name] = code
+	}
+	return inverted
+}
+
+func invertNestedStringMap(groups map[string]map[string]string) map[string]map[string]string {
+	inverted := make(map[string]map[string]string, len(groups))
+	for group, values := range groups {
+		inverted[group] = invertStringMap(values)
+	}
+	return inverted
+}
+
+func invertInt16Map(values map[int16]string) map[string]int16 {
+	inverted := make(map[string]int16, len(values))
+	for code, name := range values {
+		inverted[name] = code
+	}
+	return inverted
 }
