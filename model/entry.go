@@ -73,7 +73,7 @@ type SenseLabel struct {
 	ID int64 `gorm:"primaryKey;autoIncrement:false;default:(-);type:bigint"`
 
 	SenseID    int64  `gorm:"type:bigint;autoIncrement:false;not null;uniqueIndex:idx_sense_labels_sense_id_label_type_label_code,priority:1;index:idx_sense_labels_sense_id_label_type_label_order,priority:1"`
-	LabelType  string `gorm:"type:text;not null;check:label_type IN ('grammar','register','region','temporal','domain','attitude');uniqueIndex:idx_sense_labels_sense_id_label_type_label_code,priority:2;index:idx_sense_labels_sense_id_label_type_label_order,priority:2;index:idx_sense_labels_label_type_label_code,priority:1"`
+	LabelType  string `gorm:"type:text;not null;check:label_type IN ('grammar','register','region','temporal','domain','attitude','variety');uniqueIndex:idx_sense_labels_sense_id_label_type_label_code,priority:2;index:idx_sense_labels_sense_id_label_type_label_order,priority:2;index:idx_sense_labels_label_type_label_code,priority:1"`
 	LabelCode  string `gorm:"type:text;not null;uniqueIndex:idx_sense_labels_sense_id_label_type_label_code,priority:3;index:idx_sense_labels_label_type_label_code,priority:2"`
 	LabelOrder int16  `gorm:"type:smallint;not null;default:1;index:idx_sense_labels_sense_id_label_type_label_order,priority:3"`
 

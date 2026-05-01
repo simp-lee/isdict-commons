@@ -50,6 +50,7 @@ var (
 		"temporal": "Temporal",
 		"domain":   "Domain",
 		"attitude": "Attitude",
+		"variety":  "Variety",
 	}
 
 	step35ExpectedLabelCodeToNameByType = map[string]map[string]string{
@@ -99,26 +100,45 @@ var (
 			"historical": "Historical",
 		},
 		"domain": {
-			"medicine":     "Medicine",
-			"law":          "Law",
-			"computing":    "Computing",
-			"finance":      "Finance",
-			"business":     "Business",
-			"music":        "Music",
-			"sports":       "Sports",
-			"biology":      "Biology",
-			"chemistry":    "Chemistry",
-			"physics":      "Physics",
-			"engineering":  "Engineering",
-			"mathematics":  "Mathematics",
-			"botany":       "Botany",
-			"zoology":      "Zoology",
-			"linguistics":  "Linguistics",
-			"military":     "Military",
-			"architecture": "Architecture",
-			"religion":     "Religion",
-			"politics":     "Politics",
-			"cooking":      "Cooking",
+			"medicine":          "Medicine",
+			"law":               "Law",
+			"computing":         "Computing",
+			"finance":           "Finance",
+			"business":          "Business",
+			"music":             "Music",
+			"sports":            "Sports",
+			"biology":           "Biology",
+			"chemistry":         "Chemistry",
+			"physics":           "Physics",
+			"engineering":       "Engineering",
+			"mathematics":       "Mathematics",
+			"botany":            "Botany",
+			"zoology":           "Zoology",
+			"linguistics":       "Linguistics",
+			"military":          "Military",
+			"architecture":      "Architecture",
+			"religion":          "Religion",
+			"politics":          "Politics",
+			"cooking":           "Cooking",
+			"nautical":          "Nautical",
+			"astronomy":         "Astronomy",
+			"geology":           "Geology",
+			"aviation":          "Aviation",
+			"electronics":       "Electronics",
+			"psychology":        "Psychology",
+			"philosophy":        "Philosophy",
+			"games":             "Games",
+			"media":             "Media",
+			"education":         "Education",
+			"transport":         "Transport",
+			"automotive":        "Automotive",
+			"printing":          "Printing",
+			"mining":            "Mining",
+			"meteorology":       "Meteorology",
+			"heraldry":          "Heraldry",
+			"materials-science": "Materials Science",
+			"mythology":         "Mythology",
+			"art":               "Art",
 		},
 		"attitude": {
 			"derogatory":   "Derogatory",
@@ -126,6 +146,12 @@ var (
 			"humorous":     "Humorous",
 			"approving":    "Approving",
 			"disapproving": "Disapproving",
+		},
+		"variety": {
+			"AAVE":                         "African-American Vernacular English",
+			"Multicultural-London-English": "Multicultural London English",
+			"non-native-English":           "Non-native English",
+			"dialectal":                    "Dialectal",
 		},
 	}
 
@@ -224,8 +250,9 @@ func TestStep35ControlledLabelCodesAreCompleteAndDistributed(t *testing.T) {
 		"register": 11,
 		"region":   10,
 		"temporal": 5,
-		"domain":   20,
+		"domain":   39,
 		"attitude": 5,
+		"variety":  4,
 	}
 
 	if got := len(gotCodeToNameByType); got != len(step35ExpectedLabelCodeToNameByType) {
@@ -265,8 +292,8 @@ func TestStep35ControlledLabelCodesAreCompleteAndDistributed(t *testing.T) {
 		totalCodes += len(gotCodeToName)
 	}
 
-	if totalCodes != 62 {
-		t.Fatalf("total controlled label codes = %d; want %d", totalCodes, 62)
+	if totalCodes != 85 {
+		t.Fatalf("total controlled label codes = %d; want %d", totalCodes, 85)
 	}
 }
 

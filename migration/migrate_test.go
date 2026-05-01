@@ -1180,6 +1180,32 @@ func TestIdentityColumnsSQL_UsesActiveSchema(t *testing.T) {
 	}
 }
 
+func TestCheckConstraintsSQL_RepairsSenseLabelTypeCheck(t *testing.T) {
+	t.Parallel()
+
+	sqlText := mustReadEmbeddedSQL(t, "sql/006_check_constraints.sql")
+	for _, forbidden := range []string{
+		"table_schema = 'public'",
+		"format('public.%I'",
+		"FROM public.%I",
+	} {
+		if strings.Contains(sqlText, forbidden) {
+			t.Fatalf("006_check_constraints.sql contains forbidden public-schema fragment %q", forbidden)
+		}
+	}
+
+	for _, fragment := range []string{
+		"current_schema()",
+		"DROP CONSTRAINT",
+		"chk_sense_labels_label_type",
+		"'variety'",
+	} {
+		if !strings.Contains(sqlText, fragment) {
+			t.Fatalf("006_check_constraints.sql = %q; want repair fragment %q", sqlText, fragment)
+		}
+	}
+}
+
 func writePostgresIntegrationServiceFile(t *testing.T, serviceName, host, databaseName string) string {
 	t.Helper()
 
@@ -3971,8 +3997,8 @@ func seedMigrationFixtureSenseMetadata(t *testing.T, db *gorm.DB, suffix string,
 
 	senseLabel := model.SenseLabel{
 		SenseID:    senseID,
-		LabelType:  model.LabelTypeGrammar,
-		LabelCode:  model.GrammarLabelTransitive,
+		LabelType:  model.LabelTypeVariety,
+		LabelCode:  model.VarietyLabelAAVE,
 		LabelOrder: 1,
 	}
 	createFixtureRecord(t, db, "sense_label", &senseLabel)

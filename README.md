@@ -52,7 +52,7 @@ The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries pr
 
 - POS: 23 text codes via `POS*`, `POSCodeToName`, `POSNameToCode`, and `ValidPOSCodes`
 - Accent: 11 text codes via `Accent*`, `AccentCodeToName`, and `AccentNameToCode`
-- Controlled sense labels: 62 label codes across `grammar`, `register`, `region`, `temporal`, `domain`, and `attitude`, exposed through `LabelType*`, `LabelCodeToNameByType`, `LabelNameToCodeByType`, and `ValidLabelCodesByType`
+- Controlled sense labels: 85 label codes across `grammar`, `register`, `region`, `temporal`, `domain`, `attitude`, and `variety`, exposed through `LabelType*`, `LabelCodeToNameByType`, `LabelNameToCodeByType`, and `ValidLabelCodesByType`
 - Relation and provenance enums: `RelationType*`, `RelationKind*`, `ImportRunStatus*`, and `CEFRSource*`
 - Learning scales: `CEFRLevel*`, `OxfordLevel*`, `CETLevel*`, `SchoolLevel*`, and `CollinsStars*`, plus code/name maps
 
@@ -60,11 +60,11 @@ The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries pr
 
 - `NormalizeHeadword` and `IsMultiword`
 - `CanonicalizePOS` and `RawPOSToLearnerPOS`
-- `NormalizeLabelAlias` and `LabelAliasMap`
-- `NormalizeTopic` and `TopicToDomainMap`
+- `NormalizeLabelAlias`, `NormalizeLabelText`, and `LabelAliasMap` for conservative Wiktionary qualifier/raw_gloss label mapping, including phrase labels and comma/semicolon combinations
+- `NormalizeTopic` and `TopicToDomainMap` for controlled domain mapping with case-insensitive space/hyphen/underscore variants
 - `NormalizeAccentCode` and `AccentTagMap`
 - `NewZhNormalizer` and `(*ZhNormalizer).Normalize`
-- `AudioLocalFilename`
+- `AudioLocalFilename` and `NormalizeAudioAccentCode`, including high-confidence Wiktionary audio filename prefix detection for common English accent codes
 
 Commons intentionally keeps normalization deterministic and single-input. Importer-specific heuristics that need wider context stay outside this module.
 

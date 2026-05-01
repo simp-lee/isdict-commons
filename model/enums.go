@@ -49,6 +49,7 @@ const (
 	LabelTypeTemporal = "temporal"
 	LabelTypeDomain   = "domain"
 	LabelTypeAttitude = "attitude"
+	LabelTypeVariety  = "variety"
 )
 
 const (
@@ -101,26 +102,45 @@ const (
 )
 
 const (
-	DomainLabelMedicine     = "medicine"
-	DomainLabelLaw          = "law"
-	DomainLabelComputing    = "computing"
-	DomainLabelFinance      = "finance"
-	DomainLabelBusiness     = "business"
-	DomainLabelMusic        = "music"
-	DomainLabelSports       = "sports"
-	DomainLabelBiology      = "biology"
-	DomainLabelChemistry    = "chemistry"
-	DomainLabelPhysics      = "physics"
-	DomainLabelEngineering  = "engineering"
-	DomainLabelMathematics  = "mathematics"
-	DomainLabelBotany       = "botany"
-	DomainLabelZoology      = "zoology"
-	DomainLabelLinguistics  = "linguistics"
-	DomainLabelMilitary     = "military"
-	DomainLabelArchitecture = "architecture"
-	DomainLabelReligion     = "religion"
-	DomainLabelPolitics     = "politics"
-	DomainLabelCooking      = "cooking"
+	DomainLabelMedicine         = "medicine"
+	DomainLabelLaw              = "law"
+	DomainLabelComputing        = "computing"
+	DomainLabelFinance          = "finance"
+	DomainLabelBusiness         = "business"
+	DomainLabelMusic            = "music"
+	DomainLabelSports           = "sports"
+	DomainLabelBiology          = "biology"
+	DomainLabelChemistry        = "chemistry"
+	DomainLabelPhysics          = "physics"
+	DomainLabelEngineering      = "engineering"
+	DomainLabelMathematics      = "mathematics"
+	DomainLabelBotany           = "botany"
+	DomainLabelZoology          = "zoology"
+	DomainLabelLinguistics      = "linguistics"
+	DomainLabelMilitary         = "military"
+	DomainLabelArchitecture     = "architecture"
+	DomainLabelReligion         = "religion"
+	DomainLabelPolitics         = "politics"
+	DomainLabelCooking          = "cooking"
+	DomainLabelNautical         = "nautical"
+	DomainLabelAstronomy        = "astronomy"
+	DomainLabelGeology          = "geology"
+	DomainLabelAviation         = "aviation"
+	DomainLabelElectronics      = "electronics"
+	DomainLabelPsychology       = "psychology"
+	DomainLabelPhilosophy       = "philosophy"
+	DomainLabelGames            = "games"
+	DomainLabelMedia            = "media"
+	DomainLabelEducation        = "education"
+	DomainLabelTransport        = "transport"
+	DomainLabelAutomotive       = "automotive"
+	DomainLabelPrinting         = "printing"
+	DomainLabelMining           = "mining"
+	DomainLabelMeteorology      = "meteorology"
+	DomainLabelHeraldry         = "heraldry"
+	DomainLabelMaterialsScience = "materials-science"
+	DomainLabelMythology        = "mythology"
+	DomainLabelArt              = "art"
 )
 
 const (
@@ -129,6 +149,13 @@ const (
 	AttitudeLabelHumorous     = "humorous"
 	AttitudeLabelApproving    = "approving"
 	AttitudeLabelDisapproving = "disapproving"
+)
+
+const (
+	VarietyLabelAAVE                       = "AAVE"
+	VarietyLabelMulticulturalLondonEnglish = "Multicultural-London-English"
+	VarietyLabelNonNativeEnglish           = "non-native-English"
+	VarietyLabelDialectal                  = "dialectal"
 )
 
 const (
@@ -244,6 +271,7 @@ var (
 		LabelTypeTemporal: "Temporal",
 		LabelTypeDomain:   "Domain",
 		LabelTypeAttitude: "Attitude",
+		LabelTypeVariety:  "Variety",
 	}
 	labelTypeNameToCode = invertStringMap(labelTypeCodeToName)
 	validLabelTypes     = keySet(labelTypeCodeToName)
@@ -295,26 +323,45 @@ var (
 			TemporalLabelHistorical: "Historical",
 		},
 		LabelTypeDomain: {
-			DomainLabelMedicine:     "Medicine",
-			DomainLabelLaw:          "Law",
-			DomainLabelComputing:    "Computing",
-			DomainLabelFinance:      "Finance",
-			DomainLabelBusiness:     "Business",
-			DomainLabelMusic:        "Music",
-			DomainLabelSports:       "Sports",
-			DomainLabelBiology:      "Biology",
-			DomainLabelChemistry:    "Chemistry",
-			DomainLabelPhysics:      "Physics",
-			DomainLabelEngineering:  "Engineering",
-			DomainLabelMathematics:  "Mathematics",
-			DomainLabelBotany:       "Botany",
-			DomainLabelZoology:      "Zoology",
-			DomainLabelLinguistics:  "Linguistics",
-			DomainLabelMilitary:     "Military",
-			DomainLabelArchitecture: "Architecture",
-			DomainLabelReligion:     "Religion",
-			DomainLabelPolitics:     "Politics",
-			DomainLabelCooking:      "Cooking",
+			DomainLabelMedicine:         "Medicine",
+			DomainLabelLaw:              "Law",
+			DomainLabelComputing:        "Computing",
+			DomainLabelFinance:          "Finance",
+			DomainLabelBusiness:         "Business",
+			DomainLabelMusic:            "Music",
+			DomainLabelSports:           "Sports",
+			DomainLabelBiology:          "Biology",
+			DomainLabelChemistry:        "Chemistry",
+			DomainLabelPhysics:          "Physics",
+			DomainLabelEngineering:      "Engineering",
+			DomainLabelMathematics:      "Mathematics",
+			DomainLabelBotany:           "Botany",
+			DomainLabelZoology:          "Zoology",
+			DomainLabelLinguistics:      "Linguistics",
+			DomainLabelMilitary:         "Military",
+			DomainLabelArchitecture:     "Architecture",
+			DomainLabelReligion:         "Religion",
+			DomainLabelPolitics:         "Politics",
+			DomainLabelCooking:          "Cooking",
+			DomainLabelNautical:         "Nautical",
+			DomainLabelAstronomy:        "Astronomy",
+			DomainLabelGeology:          "Geology",
+			DomainLabelAviation:         "Aviation",
+			DomainLabelElectronics:      "Electronics",
+			DomainLabelPsychology:       "Psychology",
+			DomainLabelPhilosophy:       "Philosophy",
+			DomainLabelGames:            "Games",
+			DomainLabelMedia:            "Media",
+			DomainLabelEducation:        "Education",
+			DomainLabelTransport:        "Transport",
+			DomainLabelAutomotive:       "Automotive",
+			DomainLabelPrinting:         "Printing",
+			DomainLabelMining:           "Mining",
+			DomainLabelMeteorology:      "Meteorology",
+			DomainLabelHeraldry:         "Heraldry",
+			DomainLabelMaterialsScience: "Materials Science",
+			DomainLabelMythology:        "Mythology",
+			DomainLabelArt:              "Art",
 		},
 		LabelTypeAttitude: {
 			AttitudeLabelDerogatory:   "Derogatory",
@@ -322,6 +369,12 @@ var (
 			AttitudeLabelHumorous:     "Humorous",
 			AttitudeLabelApproving:    "Approving",
 			AttitudeLabelDisapproving: "Disapproving",
+		},
+		LabelTypeVariety: {
+			VarietyLabelAAVE:                       "African-American Vernacular English",
+			VarietyLabelMulticulturalLondonEnglish: "Multicultural London English",
+			VarietyLabelNonNativeEnglish:           "Non-native English",
+			VarietyLabelDialectal:                  "Dialectal",
 		},
 	}
 	labelNameToCodeByType = invertNestedStringMap(labelCodeToNameByType)
