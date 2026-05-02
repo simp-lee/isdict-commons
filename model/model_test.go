@@ -53,8 +53,10 @@ func TestIdentityReferencedForeignKeysExplicitlyDisableAutoIncrement(t *testing.
 		{name: "entry_learning_signal_cet_run_id", model: EntryLearningSignal{}, fieldName: "CETRunID"},
 		{name: "entry_learning_signal_frequency_run_id", model: EntryLearningSignal{}, fieldName: "FrequencyRunID"},
 		{name: "entry_learning_signal_collins_run_id", model: EntryLearningSignal{}, fieldName: "CollinsRunID"},
+		{name: "entry_cefr_source_signal_cefr_run_id", model: EntryCEFRSourceSignal{}, fieldName: "CEFRRunID"},
 		{name: "sense_learning_signal_cefr_run_id", model: SenseLearningSignal{}, fieldName: "CEFRRunID"},
 		{name: "sense_learning_signal_oxford_run_id", model: SenseLearningSignal{}, fieldName: "OxfordRunID"},
+		{name: "sense_cefr_source_signal_cefr_run_id", model: SenseCEFRSourceSignal{}, fieldName: "CEFRRunID"},
 		{name: "entry_summary_entry_id", model: EntrySummaryZH{}, fieldName: "EntryID"},
 		{name: "entry_summary_source_run_id", model: EntrySummaryZH{}, fieldName: "SourceRunID"},
 		{name: "entry_etymology_source_run_id", model: EntryEtymology{}, fieldName: "SourceRunID"},
@@ -240,6 +242,142 @@ func TestForeignKeysAsPrimaryKeysRemainOneToOneContracts(t *testing.T) {
 			assertOneToOnePrimaryKeyTagContract(t, tt.model, tt.fieldName)
 			relationship := requireBelongsToRelationship(t, tt.model, parsedSchema, tt.relationshipName, tt.relatedModel)
 			assertOneToOneRelationshipReference(t, tt.model, tt.relationshipName, tt.fieldName, tt.wantDBName, relationship)
+		})
+	}
+}
+
+func TestCEFRSourceSignalTableNameContracts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		model     interface{ TableName() string }
+		wantTable string
+	}{
+		{name: "entry_source_evidence", model: EntryCEFRSourceSignal{}, wantTable: "entry_cefr_source_signals"},
+		{name: "sense_source_evidence", model: SenseCEFRSourceSignal{}, wantTable: "sense_cefr_source_signals"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tt.model.TableName(); got != tt.wantTable {
+				t.Fatalf("%T.TableName() = %q; want %q", tt.model, got, tt.wantTable)
+			}
+		})
+	}
+}
+
+func TestCEFRSourceSignalCompositePrimaryKeyContracts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		model            any
+		wantPrimaryNames []string
+		wantPrimaryDBs   []string
+		relationshipName string
+		relatedModel     any
+	}{
+		{
+			name:             "entry_source_evidence",
+			model:            EntryCEFRSourceSignal{},
+			wantPrimaryNames: []string{"EntryID", "CEFRSource"},
+			wantPrimaryDBs:   []string{"entry_id", "cefr_source"},
+			relationshipName: "Entry",
+			relatedModel:     Entry{},
+		},
+		{
+			name:             "sense_source_evidence",
+			model:            SenseCEFRSourceSignal{},
+			wantPrimaryNames: []string{"SenseID", "CEFRSource"},
+			wantPrimaryDBs:   []string{"sense_id", "cefr_source"},
+			relationshipName: "Sense",
+			relatedModel:     Sense{},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			parsedSchema := mustParseModelSchema(t, tt.model)
+			if len(parsedSchema.PrimaryFields) != len(tt.wantPrimaryNames) {
+				t.Fatalf("%T primary fields = %d; want %d", tt.model, len(parsedSchema.PrimaryFields), len(tt.wantPrimaryNames))
+			}
+			for i, wantName := range tt.wantPrimaryNames {
+				field := parsedSchema.PrimaryFields[i]
+				if field.Name != wantName || field.DBName != tt.wantPrimaryDBs[i] {
+					t.Fatalf("%T primary field[%d] = %s/%s; want %s/%s", tt.model, i, field.Name, field.DBName, wantName, tt.wantPrimaryDBs[i])
+				}
+				if field.AutoIncrement {
+					t.Fatalf("%T primary field %s AutoIncrement = true; want false", tt.model, wantName)
+				}
+			}
+
+			relationship := requireBelongsToRelationship(t, tt.model, parsedSchema, tt.relationshipName, tt.relatedModel)
+			if len(relationship.References) == 0 {
+				t.Fatalf("schema relationship %T.%s has no references", tt.model, tt.relationshipName)
+			}
+		})
+	}
+}
+
+func TestCEFRSourceSignalGORMChecksAreSourceEvidenceOnly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		model        any
+		fieldName    string
+		wantFragment string
+	}{
+		{name: "entry_source", model: EntryCEFRSourceSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('oxford','cefrj')"},
+		{name: "sense_source", model: SenseCEFRSourceSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('oxford','cefrj')"},
+		{name: "entry_level", model: EntryCEFRSourceSignal{}, fieldName: "CEFRLevel", wantFragment: "check:cefr_level >= 0 AND cefr_level <= 6"},
+		{name: "sense_level", model: SenseCEFRSourceSignal{}, fieldName: "CEFRLevel", wantFragment: "check:cefr_level >= 0 AND cefr_level <= 6"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			field := mustStructField(t, tt.model, tt.fieldName)
+			tag := field.Tag.Get("gorm")
+			if !strings.Contains(tag, tt.wantFragment) {
+				t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
+			}
+		})
+	}
+}
+
+func TestCEFRSourceSignalRunIDColumnContracts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		model any
+	}{
+		{name: "entry_source_evidence", model: EntryCEFRSourceSignal{}},
+		{name: "sense_source_evidence", model: SenseCEFRSourceSignal{}},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			field := mustParseModelSchema(t, tt.model).LookUpField("CEFRRunID")
+			if field == nil {
+				t.Fatalf("schema field %T.CEFRRunID not found", tt.model)
+			}
+			if field.DBName != "cefr_run_id" {
+				t.Fatalf("schema field %T.CEFRRunID DBName = %q; want %q", tt.model, field.DBName, "cefr_run_id")
+			}
 		})
 	}
 }

@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Shared Go commons layer for the isdict pipeline and downstream services. This module owns the current 15-table PostgreSQL schema, shared GORM models, controlled enums, deterministic normalization helpers, and the PostgreSQL migration entrypoint used across repos.
+Shared Go commons layer for the isdict pipeline and downstream services. This module owns the current 17-table PostgreSQL schema, shared GORM models, controlled enums, deterministic normalization helpers, and the PostgreSQL migration entrypoint used across repos.
 
 ## Installation
 
@@ -17,14 +17,14 @@ Requirements: Go 1.25 language features with a patched Go toolchain at Go 1.26.2
 
 ```text
 isdict-commons/
-├── model/      # 15 GORM models and shared controlled values
+├── model/      # 17-table GORM schema and shared controlled values
 ├── norm/       # Deterministic normalization helpers and frozen alias maps
 └── migration/  # PostgreSQL schema migration and verification entrypoint
 ```
 
 ## Current Schema
 
-The model package maps to these 15 tables:
+The model package maps to these 17 tables:
 
 | Table | Model | Purpose |
 | --- | --- | --- |
@@ -41,10 +41,20 @@ The model package maps to these 15 tables:
 | `lexical_relations` | `LexicalRelation` | Synonym, antonym, and derived links |
 | `entry_summaries_zh` | `EntrySummaryZH` | Chinese summaries |
 | `entry_learning_signals` | `EntryLearningSignal` | Entry-level learner annotations |
+| `entry_cefr_source_signals` | `EntryCEFRSourceSignal` | Entry-level CEFR source evidence |
 | `sense_learning_signals` | `SenseLearningSignal` | Sense-level learner annotations |
+| `sense_cefr_source_signals` | `SenseCEFRSourceSignal` | Sense-level CEFR source evidence |
 | `entry_etymologies` | `EntryEtymology` | Etymology text |
 
 The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries provenance, `entries.pos` and pronunciation accent codes are stored as text codes, and embedded SQL adds partial indexes, expression indexes, a GIN trigram index, and identity-column behavior that GORM does not express by itself.
+
+### Learning And CEFR Signals
+
+`entry_learning_signals.cefr_level` and `sense_learning_signals.cefr_level` store the final aggregated CEFR level used by downstream queries. CEFR levels use `0..6`: `unknown=0`, `A1=1`, `A2=2`, `B1=3`, `B2=4`, `C1=5`, `C2=6`.
+
+`entry_cefr_source_signals` and `sense_cefr_source_signals` store the per-source raw CEFR evidence before aggregation. Their composite primary keys are `(entry_id, cefr_source)` and `(sense_id, cefr_source)`, `cefr_source` only allows `oxford` and `cefrj`, and `cefr_level` uses the same `0..6` scale. `cefr_run_id` points at `import_runs.id` for provenance.
+
+`OxfordLevel` / `oxford_level` is Oxford 3000/5000 list membership (`0..2`), not an Oxford CEFR A1-C2 level. Oxford CEFR evidence belongs in the source evidence tables with `cefr_source='oxford'`.
 
 ## Shared Enums And Normalization
 
@@ -94,7 +104,7 @@ func run(dsn string) error {
 }
 ```
 
-`RunMigration` runs `AutoMigrate` for all 15 models, executes the embedded SQL files under `migration/sql/`, runs `ANALYZE` as best-effort, and verifies that required tables, `pg_trgm`, indexes, and the managed `id` identity columns/sequences are present and aligned.
+`RunMigration` runs `AutoMigrate` for all 17 tables, executes the embedded SQL files under `migration/sql/`, runs `ANALYZE` as best-effort, and verifies that required tables, `pg_trgm`, indexes, and the managed `id` identity columns/sequences are present and aligned.
 
 ## Testing
 
@@ -118,7 +128,7 @@ The integration test skips when `-short` is enabled, when `ISDICT_TEST_POSTGRES_
 
 This repository now reflects the v1.0.0 schema reset.
 
-- Removed the legacy `Word`, legacy `Sense`, `Example`, `Pronunciation`, and `WordVariant` model set. Use the current 15-table schema instead.
+- Removed the legacy `Word`, legacy `Sense`, `Example`, `Pronunciation`, and `WordVariant` model set. Use the current 17-table schema instead.
 - Removed API response structs from commons. Response DTOs belong in downstream repos.
 - Removed `textutil.ToNormalized`. Use `norm.NormalizeHeadword` and the other `norm` helpers.
 - Removed `migration.NewMigrator` and `Migrator.Migrate`. Use `migration.RunMigration(db, migration.MigrateOptions{...})`.

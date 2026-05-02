@@ -63,7 +63,9 @@ var migrationTargets = []migrationTarget{
 	{TableName: "lexical_relations", Model: &model.LexicalRelation{}},
 	{TableName: "entry_summaries_zh", Model: &model.EntrySummaryZH{}},
 	{TableName: "entry_learning_signals", Model: &model.EntryLearningSignal{}},
+	{TableName: "entry_cefr_source_signals", Model: &model.EntryCEFRSourceSignal{}},
 	{TableName: "sense_learning_signals", Model: &model.SenseLearningSignal{}},
+	{TableName: "sense_cefr_source_signals", Model: &model.SenseCEFRSourceSignal{}},
 	{TableName: "entry_etymologies", Model: &model.EntryEtymology{}},
 }
 
@@ -84,7 +86,9 @@ var identityManagedTables = []string{
 
 var dropTargets = []any{
 	&model.EntryEtymology{},
+	&model.SenseCEFRSourceSignal{},
 	&model.SenseLearningSignal{},
+	&model.EntryCEFRSourceSignal{},
 	&model.EntryLearningSignal{},
 	&model.EntrySummaryZH{},
 	&model.LexicalRelation{},
@@ -142,8 +146,10 @@ var expectedIndexes = []indexTarget{
 	{TableName: "entry_learning_signals", Model: &model.EntryLearningSignal{}, IndexName: "idx_entry_learning_signals_school_level"},
 	{TableName: "entry_learning_signals", Model: &model.EntryLearningSignal{}, IndexName: "idx_entry_learning_signals_frequency_rank"},
 	{TableName: "entry_learning_signals", Model: &model.EntryLearningSignal{}, IndexName: "idx_entry_learning_signals_collins_stars"},
+	{TableName: "entry_cefr_source_signals", Model: &model.EntryCEFRSourceSignal{}, IndexName: "idx_entry_cefr_source_signals_cefr_level"},
 	{TableName: "sense_learning_signals", Model: &model.SenseLearningSignal{}, IndexName: "idx_sense_learning_signals_cefr_level"},
 	{TableName: "sense_learning_signals", Model: &model.SenseLearningSignal{}, IndexName: "idx_sense_learning_signals_oxford_level"},
+	{TableName: "sense_cefr_source_signals", Model: &model.SenseCEFRSourceSignal{}, IndexName: "idx_sense_cefr_source_signals_cefr_level"},
 	{TableName: "entry_etymologies", Model: &model.EntryEtymology{}, IndexName: "idx_entry_etymologies_source_updated_at"},
 }
 
@@ -198,7 +204,7 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 	},
 }
 
-const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, pronunciation_ipas, pronunciation_audios, entry_forms, lexical_relations, entry_summaries_zh, entry_learning_signals, sense_learning_signals, entry_etymologies`
+const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, pronunciation_ipas, pronunciation_audios, entry_forms, lexical_relations, entry_summaries_zh, entry_learning_signals, entry_cefr_source_signals, sense_learning_signals, sense_cefr_source_signals, entry_etymologies`
 
 // MigrateOptions controls schema reset and verbose progress logging for RunMigration.
 // ANALYZE is intentionally best-effort and always attempted; failures are warned about,
@@ -208,7 +214,7 @@ type MigrateOptions struct {
 	Verbose    bool
 }
 
-// RunMigration applies the full schema migration for the current 15-table model set.
+// RunMigration applies the full schema migration for the current 17-table model set.
 // ANALYZE is best-effort: the migration always attempts it and logs a warning if it fails.
 func RunMigration(db *gorm.DB, opts MigrateOptions) error {
 	if db == nil {

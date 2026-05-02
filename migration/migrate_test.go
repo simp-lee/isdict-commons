@@ -88,11 +88,13 @@ const (
 	importRunKeyEntrySummary           = "entry_summary"
 	importRunKeyEntryEtymology         = "entry_etymology"
 	importRunKeyEntryLearningCEFR      = "entry_learning_cefr"
+	importRunKeyEntryCEFRSource        = "entry_cefr_source"
 	importRunKeyEntryLearningOxford    = "entry_learning_oxford"
 	importRunKeyEntryLearningCET       = "entry_learning_cet"
 	importRunKeyEntryLearningFrequency = "entry_learning_frequency"
 	importRunKeyEntryLearningCollins   = "entry_learning_collins"
 	importRunKeySenseLearningCEFR      = "sense_learning_cefr"
+	importRunKeySenseCEFRSource        = "sense_cefr_source"
 	importRunKeySenseLearningOxford    = "sense_learning_oxford"
 )
 
@@ -102,11 +104,13 @@ var postgresIntegrationAllImportRunKeys = []string{
 	importRunKeyEntrySummary,
 	importRunKeyEntryEtymology,
 	importRunKeyEntryLearningCEFR,
+	importRunKeyEntryCEFRSource,
 	importRunKeyEntryLearningOxford,
 	importRunKeyEntryLearningCET,
 	importRunKeyEntryLearningFrequency,
 	importRunKeyEntryLearningCollins,
 	importRunKeySenseLearningCEFR,
+	importRunKeySenseCEFRSource,
 	importRunKeySenseLearningOxford,
 }
 
@@ -115,6 +119,7 @@ var postgresIntegrationEntryOwnedImportRunKeys = []string{
 	importRunKeyEntrySummary,
 	importRunKeyEntryEtymology,
 	importRunKeyEntryLearningCEFR,
+	importRunKeyEntryCEFRSource,
 	importRunKeyEntryLearningOxford,
 	importRunKeyEntryLearningCET,
 	importRunKeyEntryLearningFrequency,
@@ -124,6 +129,7 @@ var postgresIntegrationEntryOwnedImportRunKeys = []string{
 var postgresIntegrationSenseOwnedImportRunKeys = []string{
 	importRunKeySenseGlossZH,
 	importRunKeySenseLearningCEFR,
+	importRunKeySenseCEFRSource,
 	importRunKeySenseLearningOxford,
 }
 
@@ -154,7 +160,7 @@ type indexExpectation struct {
 	IndexName string
 }
 
-// These test-side contracts intentionally duplicate the accepted 15-table schema.
+// These test-side contracts intentionally duplicate the accepted 17-table schema.
 var postgresIntegrationExpectedTables = []string{
 	"import_runs",
 	"entries",
@@ -169,7 +175,9 @@ var postgresIntegrationExpectedTables = []string{
 	"lexical_relations",
 	"entry_summaries_zh",
 	"entry_learning_signals",
+	"entry_cefr_source_signals",
 	"sense_learning_signals",
+	"sense_cefr_source_signals",
 	"entry_etymologies",
 }
 
@@ -215,8 +223,10 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "entry_learning_signals", IndexName: "idx_entry_learning_signals_school_level"},
 	{TableName: "entry_learning_signals", IndexName: "idx_entry_learning_signals_frequency_rank"},
 	{TableName: "entry_learning_signals", IndexName: "idx_entry_learning_signals_collins_stars"},
+	{TableName: "entry_cefr_source_signals", IndexName: "idx_entry_cefr_source_signals_cefr_level"},
 	{TableName: "sense_learning_signals", IndexName: "idx_sense_learning_signals_cefr_level"},
 	{TableName: "sense_learning_signals", IndexName: "idx_sense_learning_signals_oxford_level"},
+	{TableName: "sense_cefr_source_signals", IndexName: "idx_sense_cefr_source_signals_cefr_level"},
 	{TableName: "entry_etymologies", IndexName: "idx_entry_etymologies_source_updated_at"},
 }
 
@@ -488,6 +498,12 @@ var postgresIntegrationExpectedGORMIndexDefinitions = []sqlIndexDefinitionTarget
 		Columns:   []string{"collins_stars"},
 	},
 	{
+		TableName: "entry_cefr_source_signals",
+		IndexName: "idx_entry_cefr_source_signals_cefr_level",
+		Method:    "btree",
+		Columns:   []string{"cefr_level"},
+	},
+	{
 		TableName: "sense_learning_signals",
 		IndexName: "idx_sense_learning_signals_cefr_level",
 		Method:    "btree",
@@ -498,6 +514,12 @@ var postgresIntegrationExpectedGORMIndexDefinitions = []sqlIndexDefinitionTarget
 		IndexName: "idx_sense_learning_signals_oxford_level",
 		Method:    "btree",
 		Columns:   []string{"oxford_level"},
+	},
+	{
+		TableName: "sense_cefr_source_signals",
+		IndexName: "idx_sense_cefr_source_signals_cefr_level",
+		Method:    "btree",
+		Columns:   []string{"cefr_level"},
 	},
 	{
 		TableName: "entry_etymologies",
@@ -1957,6 +1979,12 @@ func TestRunMigration_PostgresIntegration(t *testing.T) {
 		return
 	}
 
+	if !t.Run("CEFR source evidence tables enforce source and level contracts", func(t *testing.T) {
+		runCEFRSourceEvidenceContractSubtest(t, db)
+	}) {
+		return
+	}
+
 	if !t.Run("schema contract surfaces extra current-schema objects", func(t *testing.T) {
 		runSchemaContractExtraObjectSubtest(t, db)
 	}) {
@@ -2002,6 +2030,106 @@ func runInitialMigrationContractSubtest(t *testing.T, db *gorm.DB) {
 		{TableName: "pronunciation_ipas", ColumnName: "accent_code", DataType: "text", UDTName: "text"},
 		{TableName: "pronunciation_audios", ColumnName: "accent_code", DataType: "text", UDTName: "text"},
 		{TableName: "entry_forms", ColumnName: "source_relations", DataType: "ARRAY", UDTName: "_text"},
+	})
+}
+
+func runCEFRSourceEvidenceContractSubtest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	assertPrimaryKeyColumns(t, db, "entry_cefr_source_signals", []string{"entry_id", "cefr_source"})
+	assertPrimaryKeyColumns(t, db, "sense_cefr_source_signals", []string{"sense_id", "cefr_source"})
+
+	startedAt := time.Now().UTC()
+	entryRunID := createImportRun(t, db, "cefr-source-contract", "entry", startedAt)
+	entryCEFRRunID := createImportRun(t, db, "cefr-source-contract", "entry-source-evidence", startedAt)
+	senseCEFRRunID := createImportRun(t, db, "cefr-source-contract", "sense-source-evidence", startedAt)
+	entry := seedMigrationFixtureEntry(t, db, "cefr-source-contract", entryRunID)
+	sense := seedMigrationFixtureSense(t, db, entry.ID)
+
+	createFixtureRecord(t, db, "entry_cefr_source_signal_oxford", &model.EntryCEFRSourceSignal{
+		EntryID:    entry.ID,
+		CEFRSource: model.CEFRSourceOxford,
+		CEFRLevel:  model.CEFRLevelUnknown,
+		CEFRRunID:  int64Ptr(entryCEFRRunID),
+	})
+	createFixtureRecord(t, db, "entry_cefr_source_signal_cefrj", &model.EntryCEFRSourceSignal{
+		EntryID:    entry.ID,
+		CEFRSource: model.CEFRSourceCEFRJ,
+		CEFRLevel:  model.CEFRLevelC2,
+		CEFRRunID:  int64Ptr(entryCEFRRunID),
+	})
+	createFixtureRecord(t, db, "sense_cefr_source_signal_oxford", &model.SenseCEFRSourceSignal{
+		SenseID:    sense.ID,
+		CEFRSource: model.CEFRSourceOxford,
+		CEFRLevel:  model.CEFRLevelUnknown,
+		CEFRRunID:  int64Ptr(senseCEFRRunID),
+	})
+	createFixtureRecord(t, db, "sense_cefr_source_signal_cefrj", &model.SenseCEFRSourceSignal{
+		SenseID:    sense.ID,
+		CEFRSource: model.CEFRSourceCEFRJ,
+		CEFRLevel:  model.CEFRLevelC2,
+		CEFRRunID:  int64Ptr(senseCEFRRunID),
+	})
+
+	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, 2, "entry_id = ?", entry.ID)
+	assertModelRowCount(t, db, &model.SenseCEFRSourceSignal{}, 2, "sense_id = ?", sense.ID)
+	assertImportRunDeleteRestricted(t, db, entryCEFRRunID, "entry_cefr_source")
+	assertImportRunDeleteRestricted(t, db, senseCEFRRunID, "sense_cefr_source")
+
+	assertCheckConstraintRejected(t, db, "entry_cefr_source_signal_both", &model.EntryCEFRSourceSignal{
+		EntryID:    entry.ID,
+		CEFRSource: model.CEFRSourceBoth,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRRunID:  int64Ptr(entryCEFRRunID),
+	})
+	assertCheckConstraintRejected(t, db, "sense_cefr_source_signal_both", &model.SenseCEFRSourceSignal{
+		SenseID:    sense.ID,
+		CEFRSource: model.CEFRSourceBoth,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRRunID:  int64Ptr(senseCEFRRunID),
+	})
+
+	assertEntryCEFRLevelRejected(t, db, entryRunID, entryCEFRRunID, "cefr-source-entry-low", -1)
+	assertEntryCEFRLevelRejected(t, db, entryRunID, entryCEFRRunID, "cefr-source-entry-high", 7)
+	assertSenseCEFRLevelRejected(t, db, entryRunID, senseCEFRRunID, "cefr-source-sense-low", -1)
+	assertSenseCEFRLevelRejected(t, db, entryRunID, senseCEFRRunID, "cefr-source-sense-high", 7)
+
+	if err := db.Delete(&model.Sense{}, sense.ID).Error; err != nil {
+		t.Fatalf("Delete(sense for CEFR source evidence) error = %v; want nil", err)
+	}
+	assertModelRowCount(t, db, &model.SenseCEFRSourceSignal{}, 0, "sense_id = ?", sense.ID)
+	assertImportRunDeleteAllowed(t, db, senseCEFRRunID, "sense_cefr_source")
+	assertImportRunDeleteRestricted(t, db, entryCEFRRunID, "entry_cefr_source")
+
+	if err := db.Delete(&model.Entry{}, entry.ID).Error; err != nil {
+		t.Fatalf("Delete(entry for CEFR source evidence) error = %v; want nil", err)
+	}
+	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, 0, "entry_id = ?", entry.ID)
+	assertImportRunDeleteAllowed(t, db, entryCEFRRunID, "entry_cefr_source")
+}
+
+func assertEntryCEFRLevelRejected(t *testing.T, db *gorm.DB, entryRunID, cefrRunID int64, suffix string, cefrLevel int16) {
+	t.Helper()
+
+	entry := seedMigrationFixtureEntry(t, db, suffix, entryRunID)
+	assertCheckConstraintRejected(t, db, "entry_cefr_source_signal_"+suffix, &model.EntryCEFRSourceSignal{
+		EntryID:    entry.ID,
+		CEFRSource: model.CEFRSourceOxford,
+		CEFRLevel:  cefrLevel,
+		CEFRRunID:  int64Ptr(cefrRunID),
+	})
+}
+
+func assertSenseCEFRLevelRejected(t *testing.T, db *gorm.DB, entryRunID, cefrRunID int64, suffix string, cefrLevel int16) {
+	t.Helper()
+
+	entry := seedMigrationFixtureEntry(t, db, suffix, entryRunID)
+	sense := seedMigrationFixtureSense(t, db, entry.ID)
+	assertCheckConstraintRejected(t, db, "sense_cefr_source_signal_"+suffix, &model.SenseCEFRSourceSignal{
+		SenseID:    sense.ID,
+		CEFRSource: model.CEFRSourceOxford,
+		CEFRLevel:  cefrLevel,
+		CEFRRunID:  int64Ptr(cefrRunID),
 	})
 }
 
@@ -2427,10 +2555,7 @@ func deriveIdentityManagedTablesFromModelPrimaryKeyShape(t *testing.T) []string 
 		if parsedSchema.Table != target.TableName {
 			t.Fatalf("schema.Parse(%T) table = %q; want %q", target.Model, parsedSchema.Table, target.TableName)
 		}
-		if len(parsedSchema.PrimaryFields) != 1 {
-			t.Fatalf("%s primary field count = %d; want 1 to classify identity-managed tables", target.TableName, len(parsedSchema.PrimaryFields))
-		}
-		if parsedSchema.PrimaryFields[0].DBName == "id" {
+		if len(parsedSchema.PrimaryFields) == 1 && parsedSchema.PrimaryFields[0].DBName == "id" {
 			tables = append(tables, target.TableName)
 		}
 	}
@@ -3567,8 +3692,8 @@ func postgresIntegrationResetStatements() []string {
 func assertMigrationTablesExist(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
-	if len(postgresIntegrationExpectedTables) != 15 {
-		t.Fatalf("postgresIntegrationExpectedTables = %d; want 15-table contract", len(postgresIntegrationExpectedTables))
+	if len(postgresIntegrationExpectedTables) != 17 {
+		t.Fatalf("postgresIntegrationExpectedTables = %d; want 17-table contract", len(postgresIntegrationExpectedTables))
 	}
 
 	actualTables, err := loadCurrentSchemaTableNames(db)
@@ -3922,6 +4047,51 @@ func loadColumnMetadata(db *gorm.DB, tableName, columnName string) (columnMetada
 	return metadata, nil
 }
 
+func assertPrimaryKeyColumns(t *testing.T, db *gorm.DB, tableName string, wantColumns []string) {
+	t.Helper()
+
+	var rows []struct {
+		ColumnName string `gorm:"column:column_name"`
+	}
+	if err := db.Raw(`
+		SELECT kcu.column_name
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.key_column_usage kcu
+		  ON kcu.constraint_schema = tc.constraint_schema
+		 AND kcu.constraint_name = tc.constraint_name
+		 AND kcu.table_schema = tc.table_schema
+		 AND kcu.table_name = tc.table_name
+		WHERE tc.table_schema = current_schema()
+		  AND tc.table_name = ?
+		  AND tc.constraint_type = 'PRIMARY KEY'
+		ORDER BY kcu.ordinal_position
+	`, tableName).Scan(&rows).Error; err != nil {
+		t.Fatalf("load primary key columns for %s: %v", tableName, err)
+	}
+
+	gotColumns := make([]string, 0, len(rows))
+	for _, row := range rows {
+		gotColumns = append(gotColumns, row.ColumnName)
+	}
+	if !slices.Equal(gotColumns, wantColumns) {
+		t.Fatalf("%s primary key columns = %v; want %v", tableName, gotColumns, wantColumns)
+	}
+}
+
+func assertCheckConstraintRejected[T any](t *testing.T, db *gorm.DB, label string, value *T) {
+	t.Helper()
+
+	err := db.Create(value).Error
+	if err == nil {
+		t.Fatalf("Create(%s) error = nil; want check constraint rejection", label)
+	}
+
+	normalizedErr := strings.ToLower(err.Error())
+	if !strings.Contains(normalizedErr, "check constraint") && !strings.Contains(normalizedErr, "sqlstate 23514") {
+		t.Fatalf("Create(%s) error = %v; want check constraint rejection", label, err)
+	}
+}
+
 func seedMigrationFixture(t *testing.T, db *gorm.DB, suffix string) migrationFixture {
 	t.Helper()
 
@@ -4109,6 +4279,14 @@ func seedMigrationFixtureSummaryAndSignals(t *testing.T, db *gorm.DB, suffix str
 	}
 	createFixtureRecord(t, db, "entry_learning_signal", &entryLearningSignal)
 
+	entryCEFRSourceSignal := model.EntryCEFRSourceSignal{
+		EntryID:    entryID,
+		CEFRSource: model.CEFRSourceOxford,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRRunID:  int64Ptr(importRunIDs[importRunKeyEntryCEFRSource]),
+	}
+	createFixtureRecord(t, db, "entry_cefr_source_signal", &entryCEFRSourceSignal)
+
 	senseLearningSignal := model.SenseLearningSignal{
 		SenseID:     senseID,
 		CEFRLevel:   model.CEFRLevelA1,
@@ -4118,6 +4296,14 @@ func seedMigrationFixtureSummaryAndSignals(t *testing.T, db *gorm.DB, suffix str
 		OxfordRunID: int64Ptr(importRunIDs[importRunKeySenseLearningOxford]),
 	}
 	createFixtureRecord(t, db, "sense_learning_signal", &senseLearningSignal)
+
+	senseCEFRSourceSignal := model.SenseCEFRSourceSignal{
+		SenseID:    senseID,
+		CEFRSource: model.CEFRSourceOxford,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRRunID:  int64Ptr(importRunIDs[importRunKeySenseCEFRSource]),
+	}
+	createFixtureRecord(t, db, "sense_cefr_source_signal", &senseCEFRSourceSignal)
 
 	entryEtymology := model.EntryEtymology{
 		EntryID:          entryID,
@@ -4225,6 +4411,7 @@ func assertEntryOwnedCascadeRows(t *testing.T, db *gorm.DB, fixture migrationFix
 	assertModelRowCount(t, db, &model.LexicalRelation{}, want, "entry_id = ? AND sense_id IS NULL", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntrySummaryZH{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryLearningSignal{}, want, "entry_id = ?", fixture.EntryID)
+	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryEtymology{}, want, "entry_id = ?", fixture.EntryID)
 }
 
@@ -4237,6 +4424,7 @@ func assertSenseOwnedCascadeRows(t *testing.T, db *gorm.DB, fixture migrationFix
 	assertModelRowCount(t, db, &model.SenseExample{}, want, "sense_id = ?", fixture.SenseID)
 	assertModelRowCount(t, db, &model.LexicalRelation{}, want, "sense_id = ?", fixture.SenseID)
 	assertModelRowCount(t, db, &model.SenseLearningSignal{}, want, "sense_id = ?", fixture.SenseID)
+	assertModelRowCount(t, db, &model.SenseCEFRSourceSignal{}, want, "sense_id = ?", fixture.SenseID)
 }
 
 func loadCurrentSchemaTableNames(db *gorm.DB) ([]string, error) {

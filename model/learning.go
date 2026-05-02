@@ -33,6 +33,23 @@ func (EntryLearningSignal) TableName() string {
 	return "entry_learning_signals"
 }
 
+type EntryCEFRSourceSignal struct {
+	EntryID    int64  `gorm:"primaryKey;autoIncrement:false;type:bigint"`
+	CEFRSource string `gorm:"column:cefr_source;primaryKey;type:text;not null;check:cefr_source IN ('oxford','cefrj')"`
+
+	CEFRLevel int16  `gorm:"column:cefr_level;type:smallint;not null;default:0;check:cefr_level >= 0 AND cefr_level <= 6;index:idx_entry_cefr_source_signals_cefr_level"`
+	CEFRRunID *int64 `gorm:"column:cefr_run_id;type:bigint;autoIncrement:false"`
+
+	Entry   Entry      `gorm:"foreignKey:EntryID;references:ID;constraint:OnDelete:CASCADE"`
+	CEFRRun *ImportRun `gorm:"foreignKey:CEFRRunID;references:ID;constraint:OnDelete:RESTRICT"`
+
+	UpdatedAt time.Time `gorm:"type:timestamptz;not null;default:now()"`
+}
+
+func (EntryCEFRSourceSignal) TableName() string {
+	return "entry_cefr_source_signals"
+}
+
 type SenseLearningSignal struct {
 	SenseID int64 `gorm:"primaryKey;autoIncrement:false;type:bigint"`
 
@@ -51,4 +68,21 @@ type SenseLearningSignal struct {
 
 func (SenseLearningSignal) TableName() string {
 	return "sense_learning_signals"
+}
+
+type SenseCEFRSourceSignal struct {
+	SenseID    int64  `gorm:"primaryKey;autoIncrement:false;type:bigint"`
+	CEFRSource string `gorm:"column:cefr_source;primaryKey;type:text;not null;check:cefr_source IN ('oxford','cefrj')"`
+
+	CEFRLevel int16  `gorm:"column:cefr_level;type:smallint;not null;default:0;check:cefr_level >= 0 AND cefr_level <= 6;index:idx_sense_cefr_source_signals_cefr_level"`
+	CEFRRunID *int64 `gorm:"column:cefr_run_id;type:bigint;autoIncrement:false"`
+
+	Sense   Sense      `gorm:"foreignKey:SenseID;references:ID;constraint:OnDelete:CASCADE"`
+	CEFRRun *ImportRun `gorm:"foreignKey:CEFRRunID;references:ID;constraint:OnDelete:RESTRICT"`
+
+	UpdatedAt time.Time `gorm:"type:timestamptz;not null;default:now()"`
+}
+
+func (SenseCEFRSourceSignal) TableName() string {
+	return "sense_cefr_source_signals"
 }
