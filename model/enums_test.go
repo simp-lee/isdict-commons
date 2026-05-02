@@ -156,9 +156,17 @@ var (
 	}
 
 	step35ExpectedRelationTypeCodeToName = map[string]string{
-		"synonym": "Synonym",
-		"antonym": "Antonym",
-		"derived": "Derived",
+		"synonym":         "Synonym",
+		"antonym":         "Antonym",
+		"derived":         "Derived",
+		"related":         "Related",
+		"hypernym":        "Hypernym",
+		"hyponym":         "Hyponym",
+		"coordinate_term": "Coordinate Term",
+		"meronym":         "Meronym",
+		"holonym":         "Holonym",
+		"troponym":        "Troponym",
+		"instance":        "Instance",
 	}
 
 	step35ExpectedRelationKindCodeToName = map[string]string{

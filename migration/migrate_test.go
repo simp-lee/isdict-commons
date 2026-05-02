@@ -1180,7 +1180,7 @@ func TestIdentityColumnsSQL_UsesActiveSchema(t *testing.T) {
 	}
 }
 
-func TestCheckConstraintsSQL_RepairsSenseLabelTypeCheck(t *testing.T) {
+func TestCheckConstraintsSQL_RepairsSenseAndLexicalRelationTypeChecks(t *testing.T) {
 	t.Parallel()
 
 	sqlText := mustReadEmbeddedSQL(t, "sql/006_check_constraints.sql")
@@ -1188,6 +1188,7 @@ func TestCheckConstraintsSQL_RepairsSenseLabelTypeCheck(t *testing.T) {
 		"table_schema = 'public'",
 		"format('public.%I'",
 		"FROM public.%I",
+		"public.",
 	} {
 		if strings.Contains(sqlText, forbidden) {
 			t.Fatalf("006_check_constraints.sql contains forbidden public-schema fragment %q", forbidden)
@@ -1198,6 +1199,16 @@ func TestCheckConstraintsSQL_RepairsSenseLabelTypeCheck(t *testing.T) {
 		"current_schema()",
 		"DROP CONSTRAINT",
 		"chk_sense_labels_label_type",
+		"format('%I.%I', active_schema, 'lexical_relations')",
+		"chk_lexical_relations_relation_type",
+		"'related'",
+		"'hypernym'",
+		"'hyponym'",
+		"'coordinate_term'",
+		"'meronym'",
+		"'holonym'",
+		"'troponym'",
+		"'instance'",
 		"'variety'",
 	} {
 		if !strings.Contains(sqlText, fragment) {

@@ -25,7 +25,7 @@ type LexicalRelation struct {
 
 	EntryID              int64  `gorm:"type:bigint;autoIncrement:false;not null;index:idx_lexical_relations_entry_id_relation_type,priority:1"`
 	SenseID              *int64 `gorm:"type:bigint;autoIncrement:false;index:idx_lexical_relations_sense_id_relation_type,priority:1"`
-	RelationType         string `gorm:"type:text;not null;check:relation_type IN ('synonym','antonym','derived');index:idx_lexical_relations_entry_id_relation_type,priority:2;index:idx_lexical_relations_sense_id_relation_type,priority:2"`
+	RelationType         string `gorm:"type:text;not null;check:relation_type IN ('synonym','antonym','derived','related','hypernym','hyponym','coordinate_term','meronym','holonym','troponym','instance');index:idx_lexical_relations_entry_id_relation_type,priority:2;index:idx_lexical_relations_sense_id_relation_type,priority:2"`
 	TargetText           string `gorm:"type:text;not null"`
 	TargetTextNormalized string `gorm:"type:text;not null"`
 	DisplayOrder         int16  `gorm:"type:smallint;not null;default:1"`

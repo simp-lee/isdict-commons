@@ -159,9 +159,17 @@ const (
 )
 
 const (
-	RelationTypeSynonym = "synonym"
-	RelationTypeAntonym = "antonym"
-	RelationTypeDerived = "derived"
+	RelationTypeSynonym        = "synonym"
+	RelationTypeAntonym        = "antonym"
+	RelationTypeDerived        = "derived"
+	RelationTypeRelated        = "related"
+	RelationTypeHypernym       = "hypernym"
+	RelationTypeHyponym        = "hyponym"
+	RelationTypeCoordinateTerm = "coordinate_term"
+	RelationTypeMeronym        = "meronym"
+	RelationTypeHolonym        = "holonym"
+	RelationTypeTroponym       = "troponym"
+	RelationTypeInstance       = "instance"
 )
 
 const (
@@ -381,9 +389,17 @@ var (
 	validLabelCodesByType = nestedKeySet(labelCodeToNameByType)
 
 	relationTypeCodeToName = map[string]string{
-		RelationTypeSynonym: "Synonym",
-		RelationTypeAntonym: "Antonym",
-		RelationTypeDerived: "Derived",
+		RelationTypeSynonym:        "Synonym",
+		RelationTypeAntonym:        "Antonym",
+		RelationTypeDerived:        "Derived",
+		RelationTypeRelated:        "Related",
+		RelationTypeHypernym:       "Hypernym",
+		RelationTypeHyponym:        "Hyponym",
+		RelationTypeCoordinateTerm: "Coordinate Term",
+		RelationTypeMeronym:        "Meronym",
+		RelationTypeHolonym:        "Holonym",
+		RelationTypeTroponym:       "Troponym",
+		RelationTypeInstance:       "Instance",
 	}
 	relationTypeNameToCode = invertStringMap(relationTypeCodeToName)
 

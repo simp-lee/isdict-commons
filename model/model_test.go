@@ -116,6 +116,50 @@ func TestStep34GORMTagContracts(t *testing.T) {
 	}
 }
 
+func TestLexicalRelationRelationTypeGORMCheckAllowsControlledRelationTypes(t *testing.T) {
+	t.Parallel()
+
+	field := mustStructField(t, LexicalRelation{}, "RelationType")
+	tag := field.Tag.Get("gorm")
+
+	for _, fragment := range []string{
+		"index:idx_lexical_relations_entry_id_relation_type,priority:2",
+		"index:idx_lexical_relations_sense_id_relation_type,priority:2",
+	} {
+		if !strings.Contains(tag, fragment) {
+			t.Fatalf("LexicalRelation.RelationType gorm tag = %q; want fragment %q", tag, fragment)
+		}
+	}
+
+	const checkPrefix = "check:relation_type IN ("
+	start := strings.Index(tag, checkPrefix)
+	if start < 0 {
+		t.Fatalf("LexicalRelation.RelationType gorm tag = %q; want relation_type check", tag)
+	}
+
+	checkValues := tag[start+len(checkPrefix):]
+	end := strings.Index(checkValues, ")")
+	if end < 0 {
+		t.Fatalf("LexicalRelation.RelationType gorm tag = %q; want closed relation_type check", tag)
+	}
+
+	got := make(map[string]struct{})
+	for _, rawValue := range strings.Split(checkValues[:end], ",") {
+		value := strings.Trim(rawValue, "'")
+		got[value] = struct{}{}
+	}
+
+	want := RelationTypeCodeToName()
+	if len(got) != len(want) {
+		t.Fatalf("LexicalRelation.RelationType check values = %v; want %d controlled relation types", got, len(want))
+	}
+	for code := range want {
+		if _, ok := got[code]; !ok {
+			t.Fatalf("LexicalRelation.RelationType check values = %v; missing controlled relation type %q", got, code)
+		}
+	}
+}
+
 func TestSenseSchemaContract(t *testing.T) {
 	t.Parallel()
 
