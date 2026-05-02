@@ -2046,48 +2046,60 @@ func runCEFRSourceEvidenceContractSubtest(t *testing.T, db *gorm.DB) {
 	entry := seedMigrationFixtureEntry(t, db, "cefr-source-contract", entryRunID)
 	sense := seedMigrationFixtureSense(t, db, entry.ID)
 
-	createFixtureRecord(t, db, "entry_cefr_source_signal_oxford", &model.EntryCEFRSourceSignal{
-		EntryID:    entry.ID,
-		CEFRSource: model.CEFRSourceOxford,
-		CEFRLevel:  model.CEFRLevelUnknown,
-		CEFRRunID:  int64Ptr(entryCEFRRunID),
-	})
-	createFixtureRecord(t, db, "entry_cefr_source_signal_cefrj", &model.EntryCEFRSourceSignal{
-		EntryID:    entry.ID,
-		CEFRSource: model.CEFRSourceCEFRJ,
-		CEFRLevel:  model.CEFRLevelC2,
-		CEFRRunID:  int64Ptr(entryCEFRRunID),
-	})
-	createFixtureRecord(t, db, "sense_cefr_source_signal_oxford", &model.SenseCEFRSourceSignal{
-		SenseID:    sense.ID,
-		CEFRSource: model.CEFRSourceOxford,
-		CEFRLevel:  model.CEFRLevelUnknown,
-		CEFRRunID:  int64Ptr(senseCEFRRunID),
-	})
-	createFixtureRecord(t, db, "sense_cefr_source_signal_cefrj", &model.SenseCEFRSourceSignal{
-		SenseID:    sense.ID,
-		CEFRSource: model.CEFRSourceCEFRJ,
-		CEFRLevel:  model.CEFRLevelC2,
-		CEFRRunID:  int64Ptr(senseCEFRRunID),
-	})
+	sourceEvidence := []struct {
+		source string
+		level  int16
+	}{
+		{source: model.CEFRSourceOxford, level: model.CEFRLevelUnknown},
+		{source: model.CEFRSourceCEFRJ, level: model.CEFRLevelC2},
+		{source: model.CEFRSourceOctanove, level: model.CEFRLevelC1},
+	}
+	for _, evidence := range sourceEvidence {
+		createFixtureRecord(t, db, "entry_cefr_source_signal_"+evidence.source, &model.EntryCEFRSourceSignal{
+			EntryID:    entry.ID,
+			CEFRSource: evidence.source,
+			CEFRLevel:  evidence.level,
+			CEFRRunID:  int64Ptr(entryCEFRRunID),
+		})
+		createFixtureRecord(t, db, "sense_cefr_source_signal_"+evidence.source, &model.SenseCEFRSourceSignal{
+			SenseID:    sense.ID,
+			CEFRSource: evidence.source,
+			CEFRLevel:  evidence.level,
+			CEFRRunID:  int64Ptr(senseCEFRRunID),
+		})
+	}
 
-	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, 2, "entry_id = ?", entry.ID)
-	assertModelRowCount(t, db, &model.SenseCEFRSourceSignal{}, 2, "sense_id = ?", sense.ID)
+	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, 3, "entry_id = ?", entry.ID)
+	assertModelRowCount(t, db, &model.SenseCEFRSourceSignal{}, 3, "sense_id = ?", sense.ID)
 	assertImportRunDeleteRestricted(t, db, entryCEFRRunID, "entry_cefr_source")
 	assertImportRunDeleteRestricted(t, db, senseCEFRRunID, "sense_cefr_source")
 
 	assertCheckConstraintRejected(t, db, "entry_cefr_source_signal_both", &model.EntryCEFRSourceSignal{
 		EntryID:    entry.ID,
-		CEFRSource: model.CEFRSourceBoth,
+		CEFRSource: "both",
 		CEFRLevel:  model.CEFRLevelA1,
 		CEFRRunID:  int64Ptr(entryCEFRRunID),
 	})
 	assertCheckConstraintRejected(t, db, "sense_cefr_source_signal_both", &model.SenseCEFRSourceSignal{
 		SenseID:    sense.ID,
-		CEFRSource: model.CEFRSourceBoth,
+		CEFRSource: "both",
 		CEFRLevel:  model.CEFRLevelA1,
 		CEFRRunID:  int64Ptr(senseCEFRRunID),
 	})
+	assertCheckConstraintRejected(t, db, "entry_cefr_source_signal_none", &model.EntryCEFRSourceSignal{
+		EntryID:    entry.ID,
+		CEFRSource: model.CEFRSourceNone,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRRunID:  int64Ptr(entryCEFRRunID),
+	})
+	assertCheckConstraintRejected(t, db, "sense_cefr_source_signal_none", &model.SenseCEFRSourceSignal{
+		SenseID:    sense.ID,
+		CEFRSource: model.CEFRSourceNone,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRRunID:  int64Ptr(senseCEFRRunID),
+	})
+
+	assertAggregateLearningSignalCEFRSourceContracts(t, db, entryRunID, startedAt)
 
 	assertEntryCEFRLevelRejected(t, db, entryRunID, entryCEFRRunID, "cefr-source-entry-low", -1)
 	assertEntryCEFRLevelRejected(t, db, entryRunID, entryCEFRRunID, "cefr-source-entry-high", 7)
@@ -2106,6 +2118,61 @@ func runCEFRSourceEvidenceContractSubtest(t *testing.T, db *gorm.DB) {
 	}
 	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, 0, "entry_id = ?", entry.ID)
 	assertImportRunDeleteAllowed(t, db, entryCEFRRunID, "entry_cefr_source")
+}
+
+func assertAggregateLearningSignalCEFRSourceContracts(t *testing.T, db *gorm.DB, sourceRunID int64, startedAt time.Time) {
+	t.Helper()
+
+	entryCEFRRunID := createImportRun(t, db, "cefr-aggregate-source-contract", "entry-learning-cefr", startedAt)
+	senseCEFRRunID := createImportRun(t, db, "cefr-aggregate-source-contract", "sense-learning-cefr", startedAt)
+	allowedSources := []struct {
+		name   string
+		source string
+	}{
+		{name: "none", source: model.CEFRSourceNone},
+		{name: "oxford", source: model.CEFRSourceOxford},
+		{name: "cefrj", source: model.CEFRSourceCEFRJ},
+		{name: "octanove", source: model.CEFRSourceOctanove},
+	}
+
+	for _, allowed := range allowedSources {
+		entry := seedMigrationFixtureEntry(t, db, "cefr-aggregate-entry-"+allowed.name, sourceRunID)
+		createFixtureRecord(t, db, "entry_learning_signal_"+allowed.name, &model.EntryLearningSignal{
+			EntryID:    entry.ID,
+			CEFRLevel:  model.CEFRLevelC1,
+			CEFRSource: allowed.source,
+			CEFRRunID:  int64Ptr(entryCEFRRunID),
+		})
+
+		senseEntry := seedMigrationFixtureEntry(t, db, "cefr-aggregate-sense-entry-"+allowed.name, sourceRunID)
+		sense := seedMigrationFixtureSense(t, db, senseEntry.ID)
+		createFixtureRecord(t, db, "sense_learning_signal_"+allowed.name, &model.SenseLearningSignal{
+			SenseID:    sense.ID,
+			CEFRLevel:  model.CEFRLevelC1,
+			CEFRSource: allowed.source,
+			CEFRRunID:  int64Ptr(senseCEFRRunID),
+		})
+	}
+
+	assertModelRowCount(t, db, &model.EntryLearningSignal{}, 4, "cefr_run_id = ?", entryCEFRRunID)
+	assertModelRowCount(t, db, &model.SenseLearningSignal{}, 4, "cefr_run_id = ?", senseCEFRRunID)
+
+	entry := seedMigrationFixtureEntry(t, db, "cefr-aggregate-entry-both", sourceRunID)
+	assertCheckConstraintRejected(t, db, "entry_learning_signal_both", &model.EntryLearningSignal{
+		EntryID:    entry.ID,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRSource: "both",
+		CEFRRunID:  int64Ptr(entryCEFRRunID),
+	})
+
+	senseEntry := seedMigrationFixtureEntry(t, db, "cefr-aggregate-sense-entry-both", sourceRunID)
+	sense := seedMigrationFixtureSense(t, db, senseEntry.ID)
+	assertCheckConstraintRejected(t, db, "sense_learning_signal_both", &model.SenseLearningSignal{
+		SenseID:    sense.ID,
+		CEFRLevel:  model.CEFRLevelA1,
+		CEFRSource: "both",
+		CEFRRunID:  int64Ptr(senseCEFRRunID),
+	})
 }
 
 func assertEntryCEFRLevelRejected(t *testing.T, db *gorm.DB, entryRunID, cefrRunID int64, suffix string, cefrLevel int16) {

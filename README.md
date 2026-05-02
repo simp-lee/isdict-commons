@@ -50,9 +50,9 @@ The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries pr
 
 ### Learning And CEFR Signals
 
-`entry_learning_signals.cefr_level` and `sense_learning_signals.cefr_level` store the final aggregated CEFR level used by downstream queries. CEFR levels use `0..6`: `unknown=0`, `A1=1`, `A2=2`, `B1=3`, `B2=4`, `C1=5`, `C2=6`.
+`entry_learning_signals.cefr_level` and `sense_learning_signals.cefr_level` store the final aggregated CEFR level used by downstream queries. CEFR levels use `0..6`: `unknown=0`, `A1=1`, `A2=2`, `B1=3`, `B2=4`, `C1=5`, `C2=6`. The aggregate `cefr_source` is either unset (`''`) or the real adopted source: `oxford`, `cefrj`, or `octanove`.
 
-`entry_cefr_source_signals` and `sense_cefr_source_signals` store the per-source raw CEFR evidence before aggregation. Their composite primary keys are `(entry_id, cefr_source)` and `(sense_id, cefr_source)`, `cefr_source` only allows `oxford` and `cefrj`, and `cefr_level` uses the same `0..6` scale. `cefr_run_id` points at `import_runs.id` for provenance.
+`entry_cefr_source_signals` and `sense_cefr_source_signals` store the per-source raw CEFR evidence before aggregation. Their composite primary keys are `(entry_id, cefr_source)` and `(sense_id, cefr_source)`, `cefr_source` only allows `oxford`, `cefrj`, and `octanove`, and `cefr_level` uses the same `0..6` scale. `cefr_run_id` points at `import_runs.id` for provenance.
 
 `OxfordLevel` / `oxford_level` is Oxford 3000/5000 list membership (`0..2`), not an Oxford CEFR A1-C2 level. Oxford CEFR evidence belongs in the source evidence tables with `cefr_source='oxford'`.
 

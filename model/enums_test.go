@@ -181,10 +181,10 @@ var (
 	}
 
 	step35ExpectedCEFRSourceCodeToName = map[string]string{
-		"":       "None",
-		"oxford": "Oxford",
-		"cefrj":  "CEFR-J",
-		"both":   "Both",
+		"":         "None",
+		"oxford":   "Oxford",
+		"cefrj":    "CEFR-J",
+		"octanove": "Octanove",
 	}
 
 	step35ExpectedCEFRLevelCodeToName = map[int16]string{

@@ -335,10 +335,32 @@ func TestCEFRSourceSignalGORMChecksAreSourceEvidenceOnly(t *testing.T) {
 		fieldName    string
 		wantFragment string
 	}{
-		{name: "entry_source", model: EntryCEFRSourceSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('oxford','cefrj')"},
-		{name: "sense_source", model: SenseCEFRSourceSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('oxford','cefrj')"},
+		{name: "entry_source", model: EntryCEFRSourceSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('oxford','cefrj','octanove')"},
+		{name: "sense_source", model: SenseCEFRSourceSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('oxford','cefrj','octanove')"},
 		{name: "entry_level", model: EntryCEFRSourceSignal{}, fieldName: "CEFRLevel", wantFragment: "check:cefr_level >= 0 AND cefr_level <= 6"},
 		{name: "sense_level", model: SenseCEFRSourceSignal{}, fieldName: "CEFRLevel", wantFragment: "check:cefr_level >= 0 AND cefr_level <= 6"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			field := mustStructField(t, tt.model, tt.fieldName)
+			tag := field.Tag.Get("gorm")
+			if !strings.Contains(tag, tt.wantFragment) {
+				t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
+			}
+		})
+	}
+}
+
+func TestLearningSignalGORMChecksAllowUnsetOrRealCEFRSources(t *testing.T) {
+	t.Parallel()
+
+	tests := []gormTagExpectation{
+		{name: "entry_source", model: EntryLearningSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('','oxford','cefrj','octanove')"},
+		{name: "sense_source", model: SenseLearningSignal{}, fieldName: "CEFRSource", wantFragment: "check:cefr_source IN ('','oxford','cefrj','octanove')"},
 	}
 
 	for _, tt := range tests {

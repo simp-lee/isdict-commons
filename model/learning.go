@@ -6,7 +6,7 @@ type EntryLearningSignal struct {
 	EntryID int64 `gorm:"primaryKey;autoIncrement:false;type:bigint"`
 
 	CEFRLevel      int16  `gorm:"type:smallint;not null;default:0;check:cefr_level >= 0 AND cefr_level <= 6;index:idx_entry_learning_signals_cefr_level"`
-	CEFRSource     string `gorm:"type:text;not null;default:'';check:cefr_source IN ('','oxford','cefrj','both')"`
+	CEFRSource     string `gorm:"type:text;not null;default:'';check:cefr_source IN ('','oxford','cefrj','octanove')"`
 	CEFRRunID      *int64 `gorm:"type:bigint;autoIncrement:false"`
 	OxfordLevel    int16  `gorm:"type:smallint;not null;default:0;check:oxford_level >= 0 AND oxford_level <= 2;index:idx_entry_learning_signals_oxford_level"`
 	OxfordRunID    *int64 `gorm:"type:bigint;autoIncrement:false"`
@@ -35,7 +35,7 @@ func (EntryLearningSignal) TableName() string {
 
 type EntryCEFRSourceSignal struct {
 	EntryID    int64  `gorm:"primaryKey;autoIncrement:false;type:bigint"`
-	CEFRSource string `gorm:"column:cefr_source;primaryKey;type:text;not null;check:cefr_source IN ('oxford','cefrj')"`
+	CEFRSource string `gorm:"column:cefr_source;primaryKey;type:text;not null;check:cefr_source IN ('oxford','cefrj','octanove')"`
 
 	CEFRLevel int16  `gorm:"column:cefr_level;type:smallint;not null;default:0;check:cefr_level >= 0 AND cefr_level <= 6;index:idx_entry_cefr_source_signals_cefr_level"`
 	CEFRRunID *int64 `gorm:"column:cefr_run_id;type:bigint;autoIncrement:false"`
@@ -54,7 +54,7 @@ type SenseLearningSignal struct {
 	SenseID int64 `gorm:"primaryKey;autoIncrement:false;type:bigint"`
 
 	CEFRLevel   int16  `gorm:"type:smallint;not null;default:0;check:cefr_level >= 0 AND cefr_level <= 6;index:idx_sense_learning_signals_cefr_level"`
-	CEFRSource  string `gorm:"type:text;not null;default:'';check:cefr_source IN ('','oxford','cefrj','both')"`
+	CEFRSource  string `gorm:"type:text;not null;default:'';check:cefr_source IN ('','oxford','cefrj','octanove')"`
 	CEFRRunID   *int64 `gorm:"type:bigint;autoIncrement:false"`
 	OxfordLevel int16  `gorm:"type:smallint;not null;default:0;check:oxford_level >= 0 AND oxford_level <= 2;index:idx_sense_learning_signals_oxford_level"`
 	OxfordRunID *int64 `gorm:"type:bigint;autoIncrement:false"`
@@ -72,7 +72,7 @@ func (SenseLearningSignal) TableName() string {
 
 type SenseCEFRSourceSignal struct {
 	SenseID    int64  `gorm:"primaryKey;autoIncrement:false;type:bigint"`
-	CEFRSource string `gorm:"column:cefr_source;primaryKey;type:text;not null;check:cefr_source IN ('oxford','cefrj')"`
+	CEFRSource string `gorm:"column:cefr_source;primaryKey;type:text;not null;check:cefr_source IN ('oxford','cefrj','octanove')"`
 
 	CEFRLevel int16  `gorm:"column:cefr_level;type:smallint;not null;default:0;check:cefr_level >= 0 AND cefr_level <= 6;index:idx_sense_cefr_source_signals_cefr_level"`
 	CEFRRunID *int64 `gorm:"column:cefr_run_id;type:bigint;autoIncrement:false"`

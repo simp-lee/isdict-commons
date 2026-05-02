@@ -184,10 +184,10 @@ const (
 )
 
 const (
-	CEFRSourceNone   = ""
-	CEFRSourceOxford = "oxford"
-	CEFRSourceCEFRJ  = "cefrj"
-	CEFRSourceBoth   = "both"
+	CEFRSourceNone     = ""
+	CEFRSourceOxford   = "oxford"
+	CEFRSourceCEFRJ    = "cefrj"
+	CEFRSourceOctanove = "octanove"
 )
 
 const (
@@ -417,10 +417,10 @@ var (
 	importRunStatusNameToCode = invertStringMap(importRunStatusCodeToName)
 
 	cefrSourceCodeToName = map[string]string{
-		CEFRSourceNone:   "None",
-		CEFRSourceOxford: "Oxford",
-		CEFRSourceCEFRJ:  "CEFR-J",
-		CEFRSourceBoth:   "Both",
+		CEFRSourceNone:     "None",
+		CEFRSourceOxford:   "Oxford",
+		CEFRSourceCEFRJ:    "CEFR-J",
+		CEFRSourceOctanove: "Octanove",
 	}
 	cefrSourceNameToCode = invertStringMap(cefrSourceCodeToName)
 
