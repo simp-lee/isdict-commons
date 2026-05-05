@@ -134,6 +134,7 @@ var expectedIndexes = []indexTarget{
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_entry_id_relation_kind"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_normalized_form"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
+	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
 	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_entry_id_relation_type"},
 	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_sense_id_relation_type"},
 	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm"},
@@ -153,7 +154,7 @@ var expectedIndexes = []indexTarget{
 	{TableName: "entry_etymologies", Model: &model.EntryEtymology{}, IndexName: "idx_entry_etymologies_source_updated_at"},
 }
 
-var postgresTypeCastPattern = regexp.MustCompile(`::[a-z0-9_\.\[\]]+`)
+var postgresTypeCastPattern = regexp.MustCompile(`::[a-z0-9_\.]+(?:\[\])*`)
 
 var schemaQualifierPattern = regexp.MustCompile(`(?:^|[\s,(])(?:[a-z0-9_\-$]+\.)+`)
 
@@ -181,6 +182,13 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 		Method:    "btree",
 		Columns:   []string{"sense_id", "source"},
 		Predicate: "is_primary = true",
+	},
+	{
+		TableName: "entry_forms",
+		IndexName: "idx_entry_forms_reverse_form_text_entry_id",
+		Method:    "btree",
+		Columns:   []string{"form_text", "entry_id"},
+		Predicate: "source_relations && ARRAY['form_of','alt_of']::text[]",
 	},
 	{
 		TableName: "entry_forms",
@@ -847,7 +855,45 @@ func normalizeIndexPredicate(value string) string {
 		return strings.TrimSpace(strings.TrimSuffix(normalized, " = true"))
 	}
 
-	return normalized
+	return normalizePredicateCommaSpacing(normalized)
+}
+
+func normalizePredicateCommaSpacing(value string) string {
+	normalized := make([]byte, 0, len(value))
+	inStringLiteral := false
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if inStringLiteral {
+			normalized = append(normalized, ch)
+			if ch == '\'' {
+				if i+1 < len(value) && value[i+1] == '\'' {
+					i++
+					normalized = append(normalized, value[i])
+					continue
+				}
+				inStringLiteral = false
+			}
+			continue
+		}
+
+		switch ch {
+		case '\'':
+			inStringLiteral = true
+			normalized = append(normalized, ch)
+		case ',':
+			for len(normalized) > 0 && normalized[len(normalized)-1] == ' ' {
+				normalized = normalized[:len(normalized)-1]
+			}
+			normalized = append(normalized, ch)
+			for i+1 < len(value) && value[i+1] == ' ' {
+				i++
+			}
+		default:
+			normalized = append(normalized, ch)
+		}
+	}
+
+	return string(normalized)
 }
 
 func stripWrappingParens(value string) string {

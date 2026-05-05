@@ -211,6 +211,7 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_entry_id_relation_kind"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_normalized_form"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
+	{TableName: "entry_forms", IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
 	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_entry_id_relation_type"},
 	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_sense_id_relation_type"},
 	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm"},
@@ -254,6 +255,13 @@ var postgresIntegrationExpectedSQLManagedIndexDefinitions = []sqlIndexDefinition
 		Method:    "btree",
 		Columns:   []string{"sense_id", "source"},
 		Predicate: "is_primary = true",
+	},
+	{
+		TableName: "entry_forms",
+		IndexName: "idx_entry_forms_reverse_form_text_entry_id",
+		Method:    "btree",
+		Columns:   []string{"form_text", "entry_id"},
+		Predicate: "source_relations && ARRAY['form_of','alt_of']::text[]",
 	},
 	{
 		TableName: "entry_forms",
@@ -584,6 +592,11 @@ func TestMatchesIndexDefinition_RejectsDefinitionDrift(t *testing.T) {
 			indexDefinition: "CREATE UNIQUE INDEX idx_pronunciation_ipas_entry_id_accent_code_primary ON public.pronunciation_ipas USING btree (entry_id, accent_code)",
 		},
 		{
+			name:            "reverse_form_partial_index_wrong_predicate",
+			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_forms_reverse_form_text_entry_id"),
+			indexDefinition: "CREATE INDEX idx_entry_forms_reverse_form_text_entry_id ON public.entry_forms USING btree (form_text, entry_id) WHERE source_relations && ARRAY['form_of'::text]",
+		},
+		{
 			name:            "expression_index_wrong_coalesce_default",
 			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_forms_entry_id_relation_kind_form_text_form_type"),
 			indexDefinition: "CREATE UNIQUE INDEX idx_entry_forms_entry_id_relation_kind_form_text_form_type ON public.entry_forms USING btree (entry_id, relation_kind, form_text, COALESCE(form_type, 'unknown'::text))",
@@ -735,6 +748,11 @@ func TestMatchesIndexDefinition_AcceptsPostgresDeparserStyleDefinitions(t *testi
 			indexDefinition: "CREATE UNIQUE INDEX idx_entry_forms_entry_id_relation_kind_form_text_form_type ON public.entry_forms USING btree (entry_id, relation_kind, form_text, COALESCE((form_type)::text, ''::text))",
 		},
 		{
+			name:            "reverse_form_partial_index_array_element_casts",
+			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_forms_reverse_form_text_entry_id"),
+			indexDefinition: "CREATE INDEX idx_entry_forms_reverse_form_text_entry_id ON public.entry_forms USING btree (form_text, entry_id) WHERE ((source_relations && ARRAY['form_of'::text, 'alt_of'::text]))",
+		},
+		{
 			name:            "lexical_relations_coalesce_with_bigint_casts_and_wrapping_parens",
 			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm"),
 			indexDefinition: "CREATE UNIQUE INDEX idx_lexical_relations_entry_id_sense_id_rel_type_target_norm ON public.lexical_relations USING btree (entry_id, (COALESCE((sense_id)::bigint, (0)::bigint)), relation_type, target_text_normalized)",
@@ -795,6 +813,24 @@ func TestPostgresIntegrationIndexMatchesExpectation_AcceptsDescendingSortFromDef
 
 	if !postgresIntegrationIndexMatchesExpectation(index, target) {
 		t.Fatalf("postgresIntegrationIndexMatchesExpectation(%q) = false; want true when definition preserves DESC sort", target.IndexName)
+	}
+}
+
+func TestPostgresIntegrationIndexMatchesExpectation_AcceptsReverseFormPredicateDeparserShape(t *testing.T) {
+	t.Parallel()
+
+	target := mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_forms_reverse_form_text_entry_id")
+	index := postgresIntegrationIndexCatalog{
+		TableName:  "entry_forms",
+		IndexName:  "idx_entry_forms_reverse_form_text_entry_id",
+		Method:     "btree",
+		Columns:    pq.StringArray{"form_text", "entry_id"},
+		Predicate:  "(source_relations && ARRAY['form_of'::text, 'alt_of'::text])",
+		Definition: "CREATE INDEX idx_entry_forms_reverse_form_text_entry_id ON public.entry_forms USING btree (form_text, entry_id) WHERE (source_relations && ARRAY['form_of'::text, 'alt_of'::text])",
+	}
+
+	if !postgresIntegrationIndexMatchesExpectation(index, target) {
+		t.Fatalf("postgresIntegrationIndexMatchesExpectation(%q) = false; want true", target.IndexName)
 	}
 }
 
@@ -898,6 +934,27 @@ END $$;
 
 	if !slices.EqualFunc(got, want, equalIndexDefinitionTargets) {
 		t.Fatalf("parseGINIndexDefinitionsFromEmbeddedSQLFile() = %#v; want %#v", got, want)
+	}
+}
+
+func TestParseCreateIndexStatementFromSQL_ExtractsReverseFormPartialIndex(t *testing.T) {
+	t.Parallel()
+
+	statement := `CREATE INDEX IF NOT EXISTS idx_entry_forms_reverse_form_text_entry_id
+ON entry_forms (form_text, entry_id)
+WHERE source_relations && ARRAY['form_of','alt_of']::text[]`
+
+	got := parseCreateIndexStatementFromSQL(t, statement)
+	want := sqlIndexDefinitionTarget{
+		TableName: "entry_forms",
+		IndexName: "idx_entry_forms_reverse_form_text_entry_id",
+		Method:    "btree",
+		Columns:   []string{"form_text", "entry_id"},
+		Predicate: "source_relations && array['form_of','alt_of']",
+	}
+
+	if !equalIndexDefinitionTargets(got, want) {
+		t.Fatalf("parseCreateIndexStatementFromSQL() = %#v; want %#v", got, want)
 	}
 }
 
@@ -4019,7 +4076,7 @@ func normalizePostgresIntegrationIndexPredicate(value string) string {
 		return strings.TrimSpace(strings.TrimSuffix(normalized, " = true"))
 	}
 
-	return normalized
+	return normalizePredicateCommaSpacing(normalized)
 }
 
 func splitPostgresIntegrationTopLevelCSV(value string) []string {
