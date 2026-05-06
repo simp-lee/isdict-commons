@@ -133,6 +133,7 @@ var expectedIndexes = []indexTarget{
 	{TableName: "pronunciation_audios", Model: &model.PronunciationAudio{}, IndexName: "idx_pronunciation_audios_entry_id_accent_code_primary"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_entry_id_relation_kind"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_normalized_form"},
+	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_normalized_form_trgm"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
 	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_entry_id_relation_type"},
@@ -209,6 +210,12 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 		IndexName: "idx_entries_normalized_headword_trgm",
 		Method:    "gin",
 		Columns:   []string{"normalized_headword gin_trgm_ops"},
+	},
+	{
+		TableName: "entry_forms",
+		IndexName: "idx_entry_forms_normalized_form_trgm",
+		Method:    "gin",
+		Columns:   []string{"normalized_form gin_trgm_ops"},
 	},
 }
 

@@ -46,7 +46,7 @@ The model package maps to these 17 tables:
 | `sense_cefr_source_signals` | `SenseCEFRSourceSignal` | Sense-level CEFR source evidence |
 | `entry_etymologies` | `EntryEtymology` | Etymology text |
 
-The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries provenance, `entries.pos` and pronunciation accent codes are stored as text codes, and embedded SQL adds partial indexes, expression indexes, a GIN trigram index, and identity-column behavior that GORM does not express by itself.
+The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries provenance, `entries.pos` and pronunciation accent codes are stored as text codes, and embedded SQL adds partial indexes, expression indexes, GIN trigram indexes, and identity-column behavior that GORM does not express by itself.
 
 ### Learning And CEFR Signals
 

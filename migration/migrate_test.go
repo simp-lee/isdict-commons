@@ -210,6 +210,7 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "pronunciation_audios", IndexName: "idx_pronunciation_audios_entry_id_accent_code_primary"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_entry_id_relation_kind"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_normalized_form"},
+	{TableName: "entry_forms", IndexName: "idx_entry_forms_normalized_form_trgm"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
 	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_entry_id_relation_type"},
@@ -282,6 +283,12 @@ var postgresIntegrationExpectedSQLManagedIndexDefinitions = []sqlIndexDefinition
 		IndexName: "idx_entries_normalized_headword_trgm",
 		Method:    "gin",
 		Columns:   []string{"normalized_headword gin_trgm_ops"},
+	},
+	{
+		TableName: "entry_forms",
+		IndexName: "idx_entry_forms_normalized_form_trgm",
+		Method:    "gin",
+		Columns:   []string{"normalized_form gin_trgm_ops"},
 	},
 }
 
@@ -2514,6 +2521,7 @@ func TestRunMigration_PostgresIntegration_PgTrgmRemainsStableAcrossSchemas(t *te
 		t.Fatalf("loadExtensionSchema(%q) error = %v; want nil", "pg_trgm", err)
 	}
 	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entries", "idx_entries_normalized_headword_trgm", extensionSchema)
+	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_forms", "idx_entry_forms_normalized_form_trgm", extensionSchema)
 
 	if err := tx.Exec("SELECT set_config('search_path', ?, true)", secondSchema).Error; err != nil {
 		t.Fatalf("set_config(search_path=%q) error = %v; want nil", secondSchema, err)
@@ -2525,6 +2533,7 @@ func TestRunMigration_PostgresIntegration_PgTrgmRemainsStableAcrossSchemas(t *te
 	assertExpectedIndexesExist(t, tx)
 	assertExtensionSchema(t, tx, "pg_trgm", extensionSchema)
 	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entries", "idx_entries_normalized_headword_trgm", extensionSchema)
+	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_forms", "idx_entry_forms_normalized_form_trgm", extensionSchema)
 }
 
 func TestRunMigration_PostgresIntegration_RepairsByDefaultIdentity(t *testing.T) {
