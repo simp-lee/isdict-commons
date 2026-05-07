@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Shared Go commons layer for the isdict pipeline and downstream services. This module owns the current 17-table PostgreSQL schema, shared GORM models, controlled enums, deterministic normalization helpers, and the PostgreSQL migration entrypoint used across repos.
+Shared Go commons layer for the isdict pipeline and downstream services. This module owns the current 19-table PostgreSQL schema, shared GORM models, controlled enums, deterministic normalization helpers, and the PostgreSQL migration entrypoint used across repos.
 
 ## Installation
 
@@ -17,14 +17,14 @@ Requirements: Go 1.25 language features with a patched Go toolchain at Go 1.26.2
 
 ```text
 isdict-commons/
-├── model/      # 17-table GORM schema and shared controlled values
+├── model/      # 19-table GORM schema and shared controlled values
 ├── norm/       # Deterministic normalization helpers and frozen alias maps
 └── migration/  # PostgreSQL schema migration and verification entrypoint
 ```
 
 ## Current Schema
 
-The model package maps to these 17 tables:
+The model package maps to these 19 tables:
 
 | Table | Model | Purpose |
 | --- | --- | --- |
@@ -45,8 +45,20 @@ The model package maps to these 17 tables:
 | `sense_learning_signals` | `SenseLearningSignal` | Sense-level learner annotations |
 | `sense_cefr_source_signals` | `SenseCEFRSourceSignal` | Sense-level CEFR source evidence |
 | `entry_etymologies` | `EntryEtymology` | Etymology text |
+| `entry_search_terms` | `EntrySearchTerm` | Derived search, suggestion, and phrase-search read model |
+| `featured_candidates` | `FeaturedCandidate` | Derived featured recommendation candidate read model |
 
 The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries provenance, `entries.pos` and pronunciation accent codes are stored as text codes, and embedded SQL adds partial indexes, expression indexes, GIN trigram indexes, and identity-column behavior that GORM does not express by itself.
+
+### Derived Read Models
+
+`entry_search_terms` is the derived read model for search, suggestion, and phrase search. It materializes one `headword` row per `entries` row and one `form` or `alias` row per `entry_forms` row, using the same normalized values already stored on `entries.normalized_headword` and `entry_forms.normalized_form`. Entry-level learning signals are denormalized onto every search term; missing learning signals are stored as `0`.
+
+Search consumers should use `entry_search_terms.normalized_term`, not trigram-search `entries.normalized_headword` or `entry_forms.normalized_form` directly. The source-table btree indexes remain for exact lookup, but their old trigram indexes are dropped. `entry_search_terms` carries the trigram GIN index, prefix btree index, `entry_id`, `pos`, `is_multiword + normalized_term`, and positive learning-signal partial indexes.
+
+`featured_candidates` is the derived read model for featured recommendation candidates. It materializes entries that have `entry_learning_signals.frequency_rank > 0 OR entry_learning_signals.cefr_level > 0`, carries the fields needed for ranking and word/phrase splitting, and avoids downstream runtime joins between `entries` and `entry_learning_signals`.
+
+Both read models are maintained by migration/import refresh code; they are not business source data. `RunMigration` refreshes them once after schema/index migration, and full importers should call `migration.RefreshReadModels(db)` after `entries`, `entry_forms`, and `entry_learning_signals` are loaded.
 
 ### Learning And CEFR Signals
 
@@ -104,7 +116,20 @@ func run(dsn string) error {
 }
 ```
 
-`RunMigration` runs `AutoMigrate` for all 17 tables, executes the embedded SQL files under `migration/sql/`, runs `ANALYZE` as best-effort, and verifies that required tables, `pg_trgm`, indexes, and the managed `id` identity columns/sequences are present and aligned.
+`RunMigration` runs `AutoMigrate` for all 19 tables, executes the embedded SQL files under `migration/sql/`, refreshes `entry_search_terms` and `featured_candidates`, runs `ANALYZE` as best-effort, and verifies that required tables, `pg_trgm`, indexes, and the managed `id` identity columns/sequences are present and aligned.
+
+After a full importer load, refresh the derived read models explicitly:
+
+```go
+if err := migration.RefreshReadModels(db); err != nil {
+    return err
+}
+```
+
+Recommended downstream query direction:
+
+- Search/suggestion/fuzzy phrase search: query `entry_search_terms`, filter on `normalized_term`, `term_kind`, `pos`, `is_multiword`, and the denormalized learning-signal fields, then order by `term_rank`, `frequency_rank`, and stable tie-breakers.
+- Featured words/phrases: query `featured_candidates`, filter by `is_multiword`, and order by `quality_rank`, then optional learning-signal tie-breakers such as `cefr_level DESC`, `collins_stars DESC`, and `entry_id`.
 
 ## Testing
 
@@ -124,12 +149,27 @@ go test ./migration
 
 The integration test skips when `-short` is enabled, when `ISDICT_TEST_POSTGRES_DSN` is unset, or when `ISDICT_TEST_POSTGRES_ALLOW_DESTRUCTIVE_RESET=drop-public-migration-tables` is not set. The default-safe path is a hostless local DSN with `search_path=public`; if your shell exports `PGSERVICE`, leave it unset, and if it exports `PGHOST`, leave it unset or point it at an approved local Unix socket directory such as `/var/run/postgresql`. If you intentionally need an explicit host or `service`/`servicefile` indirection for a disposable remote CI target, also set `ISDICT_TEST_POSTGRES_ALLOW_REMOTE_DSN=allow-remote-disposable-instance`; otherwise those connections are rejected by design. Its cleanup path is intentionally strict: it refuses to run unless the database name is one of `isdict_test`, `isdict_test_db`, `isdict_integration_test`, `isdict_integration_test_db`, `isdict_migration_test`, or `isdict_migration_test_db`, `current_schema()` is `public`, and the normalized `search_path` is exactly `public`. Point it at one of those dedicated disposable test databases only.
 
+The real-data PostgreSQL test is a separate opt-in path for an existing imported database. It runs `RunMigration` with `DropTables=false`, verifies source-table row counts stay unchanged, refreshes only the derived read models, and checks that `entry_search_terms` and `featured_candidates` exactly match the source joins:
+
+```bash
+ISDICT_REALDATA_POSTGRES_DSN='host=localhost port=5432 user=isdict password=... dbname=isdict_db sslmode=disable TimeZone=Asia/Shanghai' \
+ISDICT_REALDATA_POSTGRES_ALLOW_REFRESH='refresh-derived-read-models' \
+go test ./migration -run TestRunMigration_PostgresRealData -count=1 -timeout=30m
+```
+
 ## v1.0.0 Breaking Changes
 
 This repository now reflects the v1.0.0 schema reset.
 
-- Removed the legacy `Word`, legacy `Sense`, `Example`, `Pronunciation`, and `WordVariant` model set. Use the current 17-table schema instead.
+- Removed the legacy `Word`, legacy `Sense`, `Example`, `Pronunciation`, and `WordVariant` model set. Use the current 19-table schema instead.
 - Removed API response structs from commons. Response DTOs belong in downstream repos.
 - Removed `textutil.ToNormalized`. Use `norm.NormalizeHeadword` and the other `norm` helpers.
 - Removed `migration.NewMigrator` and `Migrator.Migrate`. Use `migration.RunMigration(db, migration.MigrateOptions{...})`.
 - POS and accent storage moved from integer codes to text codes. Update persisted data, enum handling, and raw SQL accordingly.
+
+## v1.0.7 Schema Changes
+
+- Added `entry_search_terms` as the canonical search/suggestion/phrase-search read model.
+- Added `featured_candidates` as the canonical featured recommendation candidate read model.
+- Added `migration.RefreshReadModels(db)` for deterministic `TRUNCATE + INSERT SELECT` refreshes.
+- Dropped source-table trigram indexes `idx_entries_normalized_headword_trgm` and `idx_entry_forms_normalized_form_trgm`; exact lookup btree indexes remain.

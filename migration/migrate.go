@@ -67,6 +67,8 @@ var migrationTargets = []migrationTarget{
 	{TableName: "sense_learning_signals", Model: &model.SenseLearningSignal{}},
 	{TableName: "sense_cefr_source_signals", Model: &model.SenseCEFRSourceSignal{}},
 	{TableName: "entry_etymologies", Model: &model.EntryEtymology{}},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}},
+	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}},
 }
 
 var identityManagedTables = []string{
@@ -82,9 +84,12 @@ var identityManagedTables = []string{
 	"entry_forms",
 	"lexical_relations",
 	"entry_summaries_zh",
+	"entry_search_terms",
 }
 
 var dropTargets = []any{
+	&model.FeaturedCandidate{},
+	&model.EntrySearchTerm{},
 	&model.EntryEtymology{},
 	&model.SenseCEFRSourceSignal{},
 	&model.SenseLearningSignal{},
@@ -112,7 +117,6 @@ var expectedIndexes = []indexTarget{
 	{TableName: "entries", Model: &model.Entry{}, IndexName: "idx_entries_normalized_headword"},
 	{TableName: "entries", Model: &model.Entry{}, IndexName: "idx_entries_pos"},
 	{TableName: "entries", Model: &model.Entry{}, IndexName: "idx_entries_source_run_id"},
-	{TableName: "entries", Model: &model.Entry{}, IndexName: "idx_entries_normalized_headword_trgm"},
 	{TableName: "senses", Model: &model.Sense{}, IndexName: "idx_senses_entry_id_sense_order"},
 	{TableName: "sense_glosses_en", Model: &model.SenseGlossEN{}, IndexName: "idx_sense_glosses_en_sense_id_gloss_order"},
 	{TableName: "sense_glosses_zh", Model: &model.SenseGlossZH{}, IndexName: "idx_sense_glosses_zh_sense_id_source_gloss_order"},
@@ -133,7 +137,6 @@ var expectedIndexes = []indexTarget{
 	{TableName: "pronunciation_audios", Model: &model.PronunciationAudio{}, IndexName: "idx_pronunciation_audios_entry_id_accent_code_primary"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_entry_id_relation_kind"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_normalized_form"},
-	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_normalized_form_trgm"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
 	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_entry_id_relation_type"},
@@ -153,6 +156,23 @@ var expectedIndexes = []indexTarget{
 	{TableName: "sense_learning_signals", Model: &model.SenseLearningSignal{}, IndexName: "idx_sense_learning_signals_oxford_level"},
 	{TableName: "sense_cefr_source_signals", Model: &model.SenseCEFRSourceSignal{}, IndexName: "idx_sense_cefr_source_signals_cefr_level"},
 	{TableName: "entry_etymologies", Model: &model.EntryEtymology{}, IndexName: "idx_entry_etymologies_source_updated_at"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_entry_id"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_normalized_term"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_is_multiword_normalized_term"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_normalized_term_frequency_rank"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_pos"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_normalized_term_trgm"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_multiword_normalized_term_trgm"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_frequency_rank_active"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_cefr_level_active"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_oxford_level_active"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_cet_level_active"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_collins_stars_active"},
+	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}, IndexName: "idx_featured_candidates_normalized_headword"},
+	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}, IndexName: "idx_featured_candidates_is_multiword"},
+	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}, IndexName: "idx_featured_candidates_is_multiword_quality_rank"},
+	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}, IndexName: "idx_featured_candidates_frequency_rank"},
+	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}, IndexName: "idx_featured_candidates_quality_rank"},
 }
 
 var postgresTypeCastPattern = regexp.MustCompile(`::[a-z0-9_\.]+(?:\[\])*`)
@@ -206,20 +226,56 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 		Columns:   []string{"entry_id", "COALESCE(sense_id, 0)", "relation_type", "target_text_normalized"},
 	},
 	{
-		TableName: "entries",
-		IndexName: "idx_entries_normalized_headword_trgm",
-		Method:    "gin",
-		Columns:   []string{"normalized_headword gin_trgm_ops"},
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_frequency_rank_active",
+		Method:    "btree",
+		Columns:   []string{"frequency_rank", "normalized_term"},
+		Predicate: "frequency_rank > 0",
 	},
 	{
-		TableName: "entry_forms",
-		IndexName: "idx_entry_forms_normalized_form_trgm",
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_cefr_level_active",
+		Method:    "btree",
+		Columns:   []string{"cefr_level", "normalized_term"},
+		Predicate: "cefr_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_oxford_level_active",
+		Method:    "btree",
+		Columns:   []string{"oxford_level", "normalized_term"},
+		Predicate: "oxford_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_cet_level_active",
+		Method:    "btree",
+		Columns:   []string{"cet_level", "normalized_term"},
+		Predicate: "cet_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_collins_stars_active",
+		Method:    "btree",
+		Columns:   []string{"collins_stars", "normalized_term"},
+		Predicate: "collins_stars > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_normalized_term_trgm",
 		Method:    "gin",
-		Columns:   []string{"normalized_form gin_trgm_ops"},
+		Columns:   []string{"normalized_term gin_trgm_ops"},
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_multiword_normalized_term_trgm",
+		Method:    "gin",
+		Columns:   []string{"normalized_term gin_trgm_ops"},
+		Predicate: "is_multiword = true",
 	},
 }
 
-const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, pronunciation_ipas, pronunciation_audios, entry_forms, lexical_relations, entry_summaries_zh, entry_learning_signals, entry_cefr_source_signals, sense_learning_signals, sense_cefr_source_signals, entry_etymologies`
+const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, pronunciation_ipas, pronunciation_audios, entry_forms, lexical_relations, entry_summaries_zh, entry_learning_signals, entry_cefr_source_signals, sense_learning_signals, sense_cefr_source_signals, entry_etymologies, entry_search_terms, featured_candidates`
 
 // MigrateOptions controls schema reset and verbose progress logging for RunMigration.
 // ANALYZE is intentionally best-effort and always attempted; failures are warned about,
@@ -229,7 +285,7 @@ type MigrateOptions struct {
 	Verbose    bool
 }
 
-// RunMigration applies the full schema migration for the current 17-table model set.
+// RunMigration applies the full schema migration for the current 19-table model set.
 // ANALYZE is best-effort: the migration always attempts it and logs a warning if it fails.
 func RunMigration(db *gorm.DB, opts MigrateOptions) error {
 	if db == nil {
@@ -250,6 +306,11 @@ func RunMigration(db *gorm.DB, opts MigrateOptions) error {
 
 	if err := executeEmbeddedSQL(db, opts); err != nil {
 		return fmt.Errorf("execute embedded SQL: %w", err)
+	}
+
+	logVerbose(opts, "refreshing read models")
+	if err := RefreshReadModels(db); err != nil {
+		return fmt.Errorf("refresh read models: %w", err)
 	}
 
 	if err := analyzeTables(db, opts); err != nil {

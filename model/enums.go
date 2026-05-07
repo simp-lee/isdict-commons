@@ -173,6 +173,12 @@ const (
 )
 
 const (
+	TermKindHeadword = "headword"
+	TermKindForm     = "form"
+	TermKindAlias    = "alias"
+)
+
+const (
 	RelationKindForm  = "form"
 	RelationKindAlias = "alias"
 )

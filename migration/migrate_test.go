@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/lib/pq"
 	"github.com/simp-lee/isdict-commons/model"
+	"github.com/simp-lee/isdict-commons/norm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormschema "gorm.io/gorm/schema"
@@ -160,7 +161,7 @@ type indexExpectation struct {
 	IndexName string
 }
 
-// These test-side contracts intentionally duplicate the accepted 17-table schema.
+// These test-side contracts intentionally duplicate the accepted 19-table schema.
 var postgresIntegrationExpectedTables = []string{
 	"import_runs",
 	"entries",
@@ -179,6 +180,8 @@ var postgresIntegrationExpectedTables = []string{
 	"sense_learning_signals",
 	"sense_cefr_source_signals",
 	"entry_etymologies",
+	"entry_search_terms",
+	"featured_candidates",
 }
 
 var postgresIntegrationExpectedIndexes = []indexExpectation{
@@ -189,7 +192,6 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "entries", IndexName: "idx_entries_normalized_headword"},
 	{TableName: "entries", IndexName: "idx_entries_pos"},
 	{TableName: "entries", IndexName: "idx_entries_source_run_id"},
-	{TableName: "entries", IndexName: "idx_entries_normalized_headword_trgm"},
 	{TableName: "senses", IndexName: "idx_senses_entry_id_sense_order"},
 	{TableName: "sense_glosses_en", IndexName: "idx_sense_glosses_en_sense_id_gloss_order"},
 	{TableName: "sense_glosses_zh", IndexName: "idx_sense_glosses_zh_sense_id_source_gloss_order"},
@@ -210,7 +212,6 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "pronunciation_audios", IndexName: "idx_pronunciation_audios_entry_id_accent_code_primary"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_entry_id_relation_kind"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_normalized_form"},
-	{TableName: "entry_forms", IndexName: "idx_entry_forms_normalized_form_trgm"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
 	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_entry_id_relation_type"},
@@ -230,6 +231,23 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "sense_learning_signals", IndexName: "idx_sense_learning_signals_oxford_level"},
 	{TableName: "sense_cefr_source_signals", IndexName: "idx_sense_cefr_source_signals_cefr_level"},
 	{TableName: "entry_etymologies", IndexName: "idx_entry_etymologies_source_updated_at"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_entry_id"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_normalized_term"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_is_multiword_normalized_term"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_normalized_term_frequency_rank"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_pos"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_normalized_term_trgm"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_multiword_normalized_term_trgm"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_frequency_rank_active"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_cefr_level_active"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_oxford_level_active"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_cet_level_active"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_collins_stars_active"},
+	{TableName: "featured_candidates", IndexName: "idx_featured_candidates_normalized_headword"},
+	{TableName: "featured_candidates", IndexName: "idx_featured_candidates_is_multiword"},
+	{TableName: "featured_candidates", IndexName: "idx_featured_candidates_is_multiword_quality_rank"},
+	{TableName: "featured_candidates", IndexName: "idx_featured_candidates_frequency_rank"},
+	{TableName: "featured_candidates", IndexName: "idx_featured_candidates_quality_rank"},
 }
 
 var postgresIntegrationExpectedSQLManagedIndexDefinitions = []sqlIndexDefinitionTarget{
@@ -279,16 +297,52 @@ var postgresIntegrationExpectedSQLManagedIndexDefinitions = []sqlIndexDefinition
 		Columns:   []string{"entry_id", "COALESCE(sense_id, 0)", "relation_type", "target_text_normalized"},
 	},
 	{
-		TableName: "entries",
-		IndexName: "idx_entries_normalized_headword_trgm",
-		Method:    "gin",
-		Columns:   []string{"normalized_headword gin_trgm_ops"},
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_frequency_rank_active",
+		Method:    "btree",
+		Columns:   []string{"frequency_rank", "normalized_term"},
+		Predicate: "frequency_rank > 0",
 	},
 	{
-		TableName: "entry_forms",
-		IndexName: "idx_entry_forms_normalized_form_trgm",
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_cefr_level_active",
+		Method:    "btree",
+		Columns:   []string{"cefr_level", "normalized_term"},
+		Predicate: "cefr_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_oxford_level_active",
+		Method:    "btree",
+		Columns:   []string{"oxford_level", "normalized_term"},
+		Predicate: "oxford_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_cet_level_active",
+		Method:    "btree",
+		Columns:   []string{"cet_level", "normalized_term"},
+		Predicate: "cet_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_collins_stars_active",
+		Method:    "btree",
+		Columns:   []string{"collins_stars", "normalized_term"},
+		Predicate: "collins_stars > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_normalized_term_trgm",
 		Method:    "gin",
-		Columns:   []string{"normalized_form gin_trgm_ops"},
+		Columns:   []string{"normalized_term gin_trgm_ops"},
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_multiword_normalized_term_trgm",
+		Method:    "gin",
+		Columns:   []string{"normalized_term gin_trgm_ops"},
+		Predicate: "is_multiword = true",
 	},
 }
 
@@ -542,6 +596,66 @@ var postgresIntegrationExpectedGORMIndexDefinitions = []sqlIndexDefinitionTarget
 		Method:    "btree",
 		Columns:   []string{"source", "updated_at desc"},
 	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_entry_id",
+		Method:    "btree",
+		Columns:   []string{"entry_id"},
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_normalized_term",
+		Method:    "btree",
+		Columns:   []string{"normalized_term"},
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_is_multiword_normalized_term",
+		Method:    "btree",
+		Columns:   []string{"is_multiword", "normalized_term"},
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_normalized_term_frequency_rank",
+		Method:    "btree",
+		Columns:   []string{"normalized_term", "frequency_rank"},
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_pos",
+		Method:    "btree",
+		Columns:   []string{"pos"},
+	},
+	{
+		TableName: "featured_candidates",
+		IndexName: "idx_featured_candidates_normalized_headword",
+		Method:    "btree",
+		Columns:   []string{"normalized_headword"},
+	},
+	{
+		TableName: "featured_candidates",
+		IndexName: "idx_featured_candidates_is_multiword",
+		Method:    "btree",
+		Columns:   []string{"is_multiword"},
+	},
+	{
+		TableName: "featured_candidates",
+		IndexName: "idx_featured_candidates_is_multiword_quality_rank",
+		Method:    "btree",
+		Columns:   []string{"is_multiword", "quality_rank"},
+	},
+	{
+		TableName: "featured_candidates",
+		IndexName: "idx_featured_candidates_frequency_rank",
+		Method:    "btree",
+		Columns:   []string{"frequency_rank"},
+	},
+	{
+		TableName: "featured_candidates",
+		IndexName: "idx_featured_candidates_quality_rank",
+		Method:    "btree",
+		Columns:   []string{"quality_rank"},
+	},
 }
 
 var embeddedSQLIndexDefinitionAllowList = []string{
@@ -610,8 +724,8 @@ func TestMatchesIndexDefinition_RejectsDefinitionDrift(t *testing.T) {
 		},
 		{
 			name:            "gin_index_wrong_method",
-			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entries_normalized_headword_trgm"),
-			indexDefinition: "CREATE INDEX idx_entries_normalized_headword_trgm ON public.entries USING btree (normalized_headword)",
+			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_search_terms_normalized_term_trgm"),
+			indexDefinition: "CREATE INDEX idx_entry_search_terms_normalized_term_trgm ON public.entry_search_terms USING btree (normalized_term)",
 		},
 	}
 
@@ -781,8 +895,8 @@ func TestMatchesIndexDefinition_AcceptsPostgresDeparserStyleDefinitions(t *testi
 func TestMatchesIndexDefinition_AcceptsQuotedSchemaQualifiedDefinitions(t *testing.T) {
 	t.Parallel()
 
-	target := mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entries_normalized_headword_trgm")
-	indexDefinition := `CREATE INDEX idx_entries_normalized_headword_trgm ON "tenant-data".entries USING gin (normalized_headword "shared-extensions".gin_trgm_ops)`
+	target := mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_search_terms_normalized_term_trgm")
+	indexDefinition := `CREATE INDEX idx_entry_search_terms_normalized_term_trgm ON "tenant-data".entry_search_terms USING gin (normalized_term "shared-extensions".gin_trgm_ops)`
 
 	if !matchesIndexDefinition(indexDefinition, target) {
 		t.Fatalf("matchesIndexDefinition(%q) = false; want true", target.IndexName)
@@ -792,13 +906,13 @@ func TestMatchesIndexDefinition_AcceptsQuotedSchemaQualifiedDefinitions(t *testi
 func TestPostgresIntegrationIndexMatchesExpectation_AcceptsQuotedSchemaQualifiedDefinitions(t *testing.T) {
 	t.Parallel()
 
-	target := mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entries_normalized_headword_trgm")
+	target := mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_search_terms_normalized_term_trgm")
 	index := postgresIntegrationIndexCatalog{
-		TableName:  "entries",
-		IndexName:  "idx_entries_normalized_headword_trgm",
+		TableName:  "entry_search_terms",
+		IndexName:  "idx_entry_search_terms_normalized_term_trgm",
 		Method:     "gin",
-		Columns:    pq.StringArray{`normalized_headword "shared-extensions".gin_trgm_ops`},
-		Definition: `CREATE INDEX idx_entries_normalized_headword_trgm ON "tenant-data".entries USING gin (normalized_headword "shared-extensions".gin_trgm_ops)`,
+		Columns:    pq.StringArray{`normalized_term "shared-extensions".gin_trgm_ops`},
+		Definition: `CREATE INDEX idx_entry_search_terms_normalized_term_trgm ON "tenant-data".entry_search_terms USING gin (normalized_term "shared-extensions".gin_trgm_ops)`,
 	}
 
 	if !postgresIntegrationIndexMatchesExpectation(index, target) {
@@ -907,16 +1021,15 @@ DECLARE
 	extension_schema text;
 	qualified_table text;
 BEGIN
-	qualified_table := format('%I.%I', current_schema(), 'entries');
+	qualified_table := format('%I.%I', current_schema(), 'entry_search_terms');
 	EXECUTE format(
-		'CREATE INDEX IF NOT EXISTS idx_entries_normalized_headword_trgm ON %s USING gin (normalized_headword %I.gin_trgm_ops)',
+		'CREATE INDEX IF NOT EXISTS idx_entry_search_terms_normalized_term_trgm ON %s USING gin (normalized_term %I.gin_trgm_ops)',
 		qualified_table,
 		extension_schema
 	);
 
-	qualified_table := format('%I.%I', current_schema(), 'entry_forms');
 	EXECUTE format(
-		'CREATE INDEX IF NOT EXISTS idx_entry_forms_normalized_form_trgm ON %s USING gin (normalized_form %I.gin_trgm_ops)',
+		'CREATE INDEX IF NOT EXISTS idx_entry_search_terms_multiword_normalized_term_trgm ON %s USING gin (normalized_term %I.gin_trgm_ops) WHERE is_multiword = true',
 		qualified_table,
 		extension_schema
 	);
@@ -926,16 +1039,17 @@ END $$;
 	got := parseGINIndexDefinitionsFromEmbeddedSQLFile(t, sqlText)
 	want := []sqlIndexDefinitionTarget{
 		{
-			TableName: "entries",
-			IndexName: "idx_entries_normalized_headword_trgm",
+			TableName: "entry_search_terms",
+			IndexName: "idx_entry_search_terms_normalized_term_trgm",
 			Method:    "gin",
-			Columns:   []string{"normalized_headword gin_trgm_ops"},
+			Columns:   []string{"normalized_term gin_trgm_ops"},
 		},
 		{
-			TableName: "entry_forms",
-			IndexName: "idx_entry_forms_normalized_form_trgm",
+			TableName: "entry_search_terms",
+			IndexName: "idx_entry_search_terms_multiword_normalized_term_trgm",
 			Method:    "gin",
-			Columns:   []string{"normalized_form gin_trgm_ops"},
+			Columns:   []string{"normalized_term gin_trgm_ops"},
+			Predicate: "is_multiword",
 		},
 	}
 
@@ -2055,6 +2169,12 @@ func TestRunMigration_PostgresIntegration(t *testing.T) {
 		return
 	}
 
+	if !t.Run("read model refresh materializes search terms and featured candidates idempotently", func(t *testing.T) {
+		runReadModelRefreshSubtest(t, db)
+	}) {
+		return
+	}
+
 	if !t.Run("sense delete cascades sense-level rows and releases only sense-owned import runs", func(t *testing.T) {
 		runSenseDeleteCascadeSubtest(t, db)
 	}) {
@@ -2088,6 +2208,8 @@ func runInitialMigrationContractSubtest(t *testing.T, db *gorm.DB) {
 
 	assertMigrationTablesExist(t, db)
 	assertExpectedIndexesExist(t, db)
+	assertCurrentSchemaIndexAbsent(t, db, "entries", "idx_entries_normalized_headword_trgm")
+	assertCurrentSchemaIndexAbsent(t, db, "entry_forms", "idx_entry_forms_normalized_form_trgm")
 	assertColumnTypes(t, db, []columnExpectation{
 		{TableName: "import_runs", ColumnName: "source_dump_date", DataType: "date", UDTName: "date"},
 		{TableName: "entries", ColumnName: "pos", DataType: "text", UDTName: "text"},
@@ -2311,6 +2433,260 @@ func runSchemaContractExtraObjectSubtest(t *testing.T, db *gorm.DB) {
 	}
 }
 
+func runReadModelRefreshSubtest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	startedAt := time.Now().UTC()
+	sourceRunID := createImportRun(t, db, "read-model", "entry", startedAt)
+	phraseEntry := createReadModelEntry(t, db, sourceRunID, "Ice Cream", model.POSNoun)
+	phraseForm := createReadModelEntryForm(t, db, phraseEntry.ID, "Ice Creams", model.TermKindForm)
+	phraseAlias := createReadModelEntryForm(t, db, phraseEntry.ID, "gelato", model.TermKindAlias)
+	createFixtureRecord(t, db, "read_model_phrase_learning_signal", &model.EntryLearningSignal{
+		EntryID:        phraseEntry.ID,
+		CEFRLevel:      model.CEFRLevelB1,
+		CEFRSource:     model.CEFRSourceOxford,
+		OxfordLevel:    model.OxfordLevel3000,
+		CETLevel:       model.CETLevel4,
+		SchoolLevel:    model.SchoolLevelHighSchool,
+		FrequencyRank:  42,
+		FrequencyCount: 4200,
+		CollinsStars:   model.CollinsFourStars,
+	})
+
+	missingSignalEntry := createReadModelEntry(t, db, sourceRunID, "Signal Missing", model.POSPhrase)
+	createReadModelEntryForm(t, db, missingSignalEntry.ID, "Signal-Missing", model.TermKindForm)
+
+	cefrOnlyEntry := createReadModelEntry(t, db, sourceRunID, "Notebook", model.POSNoun)
+	createFixtureRecord(t, db, "read_model_cefr_only_learning_signal", &model.EntryLearningSignal{
+		EntryID:    cefrOnlyEntry.ID,
+		CEFRLevel:  model.CEFRLevelA2,
+		CEFRSource: model.CEFRSourceCEFRJ,
+	})
+
+	if err := RefreshReadModels(db); err != nil {
+		t.Fatalf("RefreshReadModels() error = %v; want nil", err)
+	}
+	firstSearchTermCount := loadTableRowCount(t, db, "entry_search_terms")
+	firstFeaturedCount := loadTableRowCount(t, db, "featured_candidates")
+	if err := RefreshReadModels(db); err != nil {
+		t.Fatalf("second RefreshReadModels() error = %v; want nil", err)
+	}
+	if got := loadTableRowCount(t, db, "entry_search_terms"); got != firstSearchTermCount {
+		t.Fatalf("entry_search_terms count after repeated refresh = %d; want %d", got, firstSearchTermCount)
+	}
+	if got := loadTableRowCount(t, db, "featured_candidates"); got != firstFeaturedCount {
+		t.Fatalf("featured_candidates count after repeated refresh = %d; want %d", got, firstFeaturedCount)
+	}
+
+	assertReadModelSearchTerms(t, db, phraseEntry, phraseForm, phraseAlias)
+	assertReadModelMissingSignalsDefaultToZero(t, db, missingSignalEntry.ID)
+	assertFeaturedCandidate(t, db, phraseEntry.ID, true, 42)
+	assertFeaturedCandidate(t, db, cefrOnlyEntry.ID, false, 999999)
+	assertModelRowCount(t, db, &model.FeaturedCandidate{}, 0, "entry_id = ?", missingSignalEntry.ID)
+	assertFeaturedCandidatesMatchSourceJoin(t, db)
+}
+
+func createReadModelEntry(t *testing.T, db *gorm.DB, sourceRunID int64, headword, pos string) model.Entry {
+	t.Helper()
+
+	entry := model.Entry{
+		Headword:           headword,
+		NormalizedHeadword: norm.NormalizeHeadword(headword),
+		Pos:                pos,
+		EtymologyIndex:     0,
+		IsMultiword:        norm.IsMultiword(headword),
+		SourceRunID:        sourceRunID,
+	}
+	createFixtureRecord(t, db, "read_model_entry", &entry)
+
+	return entry
+}
+
+func createReadModelEntryForm(t *testing.T, db *gorm.DB, entryID int64, formText, relationKind string) model.EntryForm {
+	t.Helper()
+
+	form := model.EntryForm{
+		EntryID:         entryID,
+		FormText:        formText,
+		NormalizedForm:  norm.NormalizeHeadword(formText),
+		RelationKind:    relationKind,
+		SourceRelations: pq.StringArray{},
+		DisplayOrder:    1,
+	}
+	createFixtureRecord(t, db, "read_model_entry_form", &form)
+
+	return form
+}
+
+func assertReadModelSearchTerms(t *testing.T, db *gorm.DB, entry model.Entry, form, alias model.EntryForm) {
+	t.Helper()
+
+	var terms []model.EntrySearchTerm
+	if err := db.Where("entry_id = ?", entry.ID).Order("term_rank, term_kind, term_text").Find(&terms).Error; err != nil {
+		t.Fatalf("load entry_search_terms for entry %d: %v", entry.ID, err)
+	}
+	if len(terms) != 3 {
+		t.Fatalf("entry_search_terms for entry %d = %d rows; want 3 rows: %#v", entry.ID, len(terms), terms)
+	}
+
+	headwordTerm := requireSearchTerm(t, terms, model.TermKindHeadword, entry.Headword)
+	if headwordTerm.TermRank != 1 {
+		t.Fatalf("headword term_rank = %d; want 1", headwordTerm.TermRank)
+	}
+	if headwordTerm.NormalizedTerm != entry.NormalizedHeadword {
+		t.Fatalf("headword normalized_term = %q; want source normalized_headword %q", headwordTerm.NormalizedTerm, entry.NormalizedHeadword)
+	}
+	if !headwordTerm.IsMultiword {
+		t.Fatal("headword is_multiword = false; want true for phrase entry")
+	}
+	assertSearchTermLearningFields(t, headwordTerm, 42, 4200, model.CEFRLevelB1, model.OxfordLevel3000, model.CETLevel4, model.CollinsFourStars, model.SchoolLevelHighSchool)
+
+	formTerm := requireSearchTerm(t, terms, model.TermKindForm, form.FormText)
+	if formTerm.TermRank != 2 {
+		t.Fatalf("form term_rank = %d; want 2", formTerm.TermRank)
+	}
+	if formTerm.NormalizedTerm != form.NormalizedForm {
+		t.Fatalf("form normalized_term = %q; want source normalized_form %q", formTerm.NormalizedTerm, form.NormalizedForm)
+	}
+	if !formTerm.IsMultiword {
+		t.Fatal("form is_multiword = false; want true for spaced form")
+	}
+	assertSearchTermLearningFields(t, formTerm, 42, 4200, model.CEFRLevelB1, model.OxfordLevel3000, model.CETLevel4, model.CollinsFourStars, model.SchoolLevelHighSchool)
+
+	aliasTerm := requireSearchTerm(t, terms, model.TermKindAlias, alias.FormText)
+	if aliasTerm.TermRank != 2 {
+		t.Fatalf("alias term_rank = %d; want 2", aliasTerm.TermRank)
+	}
+	if aliasTerm.NormalizedTerm != alias.NormalizedForm {
+		t.Fatalf("alias normalized_term = %q; want source normalized_form %q", aliasTerm.NormalizedTerm, alias.NormalizedForm)
+	}
+	if aliasTerm.IsMultiword {
+		t.Fatal("alias is_multiword = true; want false for single-word alias")
+	}
+	assertSearchTermLearningFields(t, aliasTerm, 42, 4200, model.CEFRLevelB1, model.OxfordLevel3000, model.CETLevel4, model.CollinsFourStars, model.SchoolLevelHighSchool)
+}
+
+func requireSearchTerm(t *testing.T, terms []model.EntrySearchTerm, termKind, termText string) model.EntrySearchTerm {
+	t.Helper()
+
+	for _, term := range terms {
+		if term.TermKind == termKind && term.TermText == termText {
+			return term
+		}
+	}
+
+	t.Fatalf("entry_search_terms missing term_kind=%q term_text=%q in %#v", termKind, termText, terms)
+	return model.EntrySearchTerm{}
+}
+
+func assertSearchTermLearningFields(t *testing.T, term model.EntrySearchTerm, frequencyRank, frequencyCount int, cefrLevel, oxfordLevel, cetLevel, collinsStars, schoolLevel int16) {
+	t.Helper()
+
+	if term.FrequencyRank != frequencyRank ||
+		term.FrequencyCount != frequencyCount ||
+		term.CEFRLevel != cefrLevel ||
+		term.OxfordLevel != oxfordLevel ||
+		term.CETLevel != cetLevel ||
+		term.CollinsStars != collinsStars ||
+		term.SchoolLevel != schoolLevel {
+		t.Fatalf(
+			"entry_search_terms learning fields = {frequency_rank:%d frequency_count:%d cefr:%d oxford:%d cet:%d collins:%d school:%d}; want {%d %d %d %d %d %d %d}",
+			term.FrequencyRank,
+			term.FrequencyCount,
+			term.CEFRLevel,
+			term.OxfordLevel,
+			term.CETLevel,
+			term.CollinsStars,
+			term.SchoolLevel,
+			frequencyRank,
+			frequencyCount,
+			cefrLevel,
+			oxfordLevel,
+			cetLevel,
+			collinsStars,
+			schoolLevel,
+		)
+	}
+}
+
+func assertReadModelMissingSignalsDefaultToZero(t *testing.T, db *gorm.DB, entryID int64) {
+	t.Helper()
+
+	var term model.EntrySearchTerm
+	if err := db.Where("entry_id = ? AND term_kind = ?", entryID, model.TermKindHeadword).First(&term).Error; err != nil {
+		t.Fatalf("load missing-signal headword term for entry %d: %v", entryID, err)
+	}
+	assertSearchTermLearningFields(t, term, 0, 0, 0, 0, 0, 0, 0)
+}
+
+func assertFeaturedCandidate(t *testing.T, db *gorm.DB, entryID int64, wantMultiword bool, wantQualityRank int) {
+	t.Helper()
+
+	var candidate model.FeaturedCandidate
+	if err := db.First(&candidate, "entry_id = ?", entryID).Error; err != nil {
+		t.Fatalf("load featured_candidate entry_id=%d: %v", entryID, err)
+	}
+	if candidate.IsMultiword != wantMultiword {
+		t.Fatalf("featured_candidates entry_id=%d is_multiword = %t; want %t", entryID, candidate.IsMultiword, wantMultiword)
+	}
+	if candidate.QualityRank != wantQualityRank {
+		t.Fatalf("featured_candidates entry_id=%d quality_rank = %d; want %d", entryID, candidate.QualityRank, wantQualityRank)
+	}
+}
+
+func assertFeaturedCandidatesMatchSourceJoin(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	var result struct {
+		MismatchCount int64 `gorm:"column:mismatch_count"`
+	}
+	if err := db.Raw(`
+		WITH expected AS (
+			SELECT
+				e.id AS entry_id,
+				e.headword,
+				e.normalized_headword,
+				e.is_multiword,
+				e.pos,
+				ls.frequency_rank,
+				ls.cefr_level,
+				ls.oxford_level,
+				ls.cet_level,
+				ls.collins_stars,
+				CASE WHEN ls.frequency_rank > 0 THEN ls.frequency_rank ELSE 999999 END AS quality_rank
+			FROM entries e
+			JOIN entry_learning_signals ls ON ls.entry_id = e.id
+			WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0
+		),
+		actual AS (
+			SELECT
+				entry_id,
+				headword,
+				normalized_headword,
+				is_multiword,
+				pos,
+				frequency_rank,
+				cefr_level,
+				oxford_level,
+				cet_level,
+				collins_stars,
+				quality_rank
+			FROM featured_candidates
+		),
+		mismatches AS (
+			(SELECT * FROM expected EXCEPT SELECT * FROM actual)
+			UNION ALL
+			(SELECT * FROM actual EXCEPT SELECT * FROM expected)
+		)
+		SELECT COUNT(*) AS mismatch_count FROM mismatches
+	`).Scan(&result).Error; err != nil {
+		t.Fatalf("compare featured_candidates with source join: %v", err)
+	}
+	if result.MismatchCount != 0 {
+		t.Fatalf("featured_candidates mismatch count = %d; want 0", result.MismatchCount)
+	}
+}
+
 func runSenseDeleteCascadeSubtest(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
@@ -2520,8 +2896,8 @@ func TestRunMigration_PostgresIntegration_PgTrgmRemainsStableAcrossSchemas(t *te
 	if err != nil {
 		t.Fatalf("loadExtensionSchema(%q) error = %v; want nil", "pg_trgm", err)
 	}
-	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entries", "idx_entries_normalized_headword_trgm", extensionSchema)
-	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_forms", "idx_entry_forms_normalized_form_trgm", extensionSchema)
+	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_search_terms", "idx_entry_search_terms_normalized_term_trgm", extensionSchema)
+	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_search_terms", "idx_entry_search_terms_multiword_normalized_term_trgm", extensionSchema)
 
 	if err := tx.Exec("SELECT set_config('search_path', ?, true)", secondSchema).Error; err != nil {
 		t.Fatalf("set_config(search_path=%q) error = %v; want nil", secondSchema, err)
@@ -2532,8 +2908,8 @@ func TestRunMigration_PostgresIntegration_PgTrgmRemainsStableAcrossSchemas(t *te
 	assertMigrationTablesExist(t, tx)
 	assertExpectedIndexesExist(t, tx)
 	assertExtensionSchema(t, tx, "pg_trgm", extensionSchema)
-	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entries", "idx_entries_normalized_headword_trgm", extensionSchema)
-	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_forms", "idx_entry_forms_normalized_form_trgm", extensionSchema)
+	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_search_terms", "idx_entry_search_terms_normalized_term_trgm", extensionSchema)
+	assertCurrentSchemaIndexUsesOperatorClassSchema(t, tx, "entry_search_terms", "idx_entry_search_terms_multiword_normalized_term_trgm", extensionSchema)
 }
 
 func TestRunMigration_PostgresIntegration_RepairsByDefaultIdentity(t *testing.T) {
@@ -3825,8 +4201,8 @@ func postgresIntegrationResetStatements() []string {
 func assertMigrationTablesExist(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
-	if len(postgresIntegrationExpectedTables) != 17 {
-		t.Fatalf("postgresIntegrationExpectedTables = %d; want 17-table contract", len(postgresIntegrationExpectedTables))
+	if len(postgresIntegrationExpectedTables) != 19 {
+		t.Fatalf("postgresIntegrationExpectedTables = %d; want 19-table contract", len(postgresIntegrationExpectedTables))
 	}
 
 	actualTables, err := loadCurrentSchemaTableNames(db)
@@ -3893,6 +4269,26 @@ func assertExpectedIndexDefinitions(t *testing.T, indexCatalog map[string]postgr
 				target.Predicate,
 			)
 		}
+	}
+}
+
+func assertCurrentSchemaIndexAbsent(t *testing.T, db *gorm.DB, tableName, indexName string) {
+	t.Helper()
+
+	var result struct {
+		IndexCount int64 `gorm:"column:index_count"`
+	}
+	if err := db.Raw(`
+		SELECT COUNT(*) AS index_count
+		FROM pg_indexes
+		WHERE schemaname = current_schema()
+		  AND tablename = ?
+		  AND indexname = ?
+	`, tableName, indexName).Scan(&result).Error; err != nil {
+		t.Fatalf("check index %s(%s) absence: %v", indexName, tableName, err)
+	}
+	if result.IndexCount != 0 {
+		t.Fatalf("index %s(%s) exists; want absent", indexName, tableName)
 	}
 }
 
@@ -4666,6 +5062,19 @@ func loadTableMaxID(t *testing.T, db *gorm.DB, tableName string) int64 {
 	}
 
 	return maxID
+}
+
+func loadTableRowCount(t *testing.T, db *gorm.DB, tableName string) int64 {
+	t.Helper()
+
+	var result struct {
+		RowCount int64 `gorm:"column:row_count"`
+	}
+	if err := db.Table(tableName).Select("COUNT(*) AS row_count").Scan(&result).Error; err != nil {
+		t.Fatalf("load row count for %s: %v", tableName, err)
+	}
+
+	return result.RowCount
 }
 
 func assertAllMigrationTablesEmpty(t *testing.T, db *gorm.DB) {

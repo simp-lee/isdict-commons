@@ -48,6 +48,7 @@ func TestIdentityReferencedForeignKeysExplicitlyDisableAutoIncrement(t *testing.
 		{name: "entry_form_entry_id", model: EntryForm{}, fieldName: "EntryID"},
 		{name: "lexical_relation_entry_id", model: LexicalRelation{}, fieldName: "EntryID"},
 		{name: "lexical_relation_sense_id", model: LexicalRelation{}, fieldName: "SenseID"},
+		{name: "entry_search_term_entry_id", model: EntrySearchTerm{}, fieldName: "EntryID"},
 		{name: "entry_learning_signal_cefr_run_id", model: EntryLearningSignal{}, fieldName: "CEFRRunID"},
 		{name: "entry_learning_signal_oxford_run_id", model: EntryLearningSignal{}, fieldName: "OxfordRunID"},
 		{name: "entry_learning_signal_cet_run_id", model: EntryLearningSignal{}, fieldName: "CETRunID"},
@@ -60,6 +61,7 @@ func TestIdentityReferencedForeignKeysExplicitlyDisableAutoIncrement(t *testing.
 		{name: "entry_summary_entry_id", model: EntrySummaryZH{}, fieldName: "EntryID"},
 		{name: "entry_summary_source_run_id", model: EntrySummaryZH{}, fieldName: "SourceRunID"},
 		{name: "entry_etymology_source_run_id", model: EntryEtymology{}, fieldName: "SourceRunID"},
+		{name: "featured_candidate_entry_id", model: FeaturedCandidate{}, fieldName: "EntryID"},
 	}
 
 	for _, tt := range tests {
@@ -102,6 +104,8 @@ func TestStep34GORMTagContracts(t *testing.T) {
 		{name: "entry_pos", model: Entry{}, fieldName: "Pos", wantFragment: "type:text"},
 		{name: "pronunciation_ipa_accent_code", model: PronunciationIPA{}, fieldName: "AccentCode", wantFragment: "type:text"},
 		{name: "entry_form_source_relations", model: EntryForm{}, fieldName: "SourceRelations", wantFragment: "type:text[]"},
+		{name: "entry_search_term_normalized_term", model: EntrySearchTerm{}, fieldName: "NormalizedTerm", wantFragment: "idx_entry_search_terms_normalized_term"},
+		{name: "featured_candidate_quality_rank", model: FeaturedCandidate{}, fieldName: "QualityRank", wantFragment: "idx_featured_candidates_quality_rank"},
 	}
 
 	for _, tt := range tests {
@@ -230,6 +234,14 @@ func TestForeignKeysAsPrimaryKeysRemainOneToOneContracts(t *testing.T) {
 			relatedModel:     Entry{},
 			wantDBName:       "entry_id",
 		},
+		{
+			name:             "featured_candidate_entry_id",
+			model:            FeaturedCandidate{},
+			fieldName:        "EntryID",
+			relationshipName: "Entry",
+			relatedModel:     Entry{},
+			wantDBName:       "entry_id",
+		},
 	}
 
 	for _, tt := range tests {
@@ -267,6 +279,87 @@ func TestCEFRSourceSignalTableNameContracts(t *testing.T) {
 				t.Fatalf("%T.TableName() = %q; want %q", tt.model, got, tt.wantTable)
 			}
 		})
+	}
+}
+
+func TestReadModelTableNameContracts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		model     interface{ TableName() string }
+		wantTable string
+	}{
+		{name: "entry_search_terms", model: EntrySearchTerm{}, wantTable: "entry_search_terms"},
+		{name: "featured_candidates", model: FeaturedCandidate{}, wantTable: "featured_candidates"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := tt.model.TableName(); got != tt.wantTable {
+				t.Fatalf("%T.TableName() = %q; want %q", tt.model, got, tt.wantTable)
+			}
+		})
+	}
+}
+
+func TestEntrySearchTermSchemaContract(t *testing.T) {
+	t.Parallel()
+
+	parsedSchema := mustParseModelSchema(t, EntrySearchTerm{})
+	for _, fieldName := range []string{
+		"ID",
+		"EntryID",
+		"Headword",
+		"TermText",
+		"NormalizedTerm",
+		"TermKind",
+		"TermRank",
+		"Pos",
+		"IsMultiword",
+		"FrequencyRank",
+		"FrequencyCount",
+		"CEFRLevel",
+		"OxfordLevel",
+		"CETLevel",
+		"CollinsStars",
+		"SchoolLevel",
+	} {
+		if parsedSchema.LookUpField(fieldName) == nil {
+			t.Fatalf("EntrySearchTerm schema field %s not found", fieldName)
+		}
+	}
+
+	termKindTag := mustStructField(t, EntrySearchTerm{}, "TermKind").Tag.Get("gorm")
+	if !strings.Contains(termKindTag, "check:term_kind IN ('headword','form','alias')") {
+		t.Fatalf("EntrySearchTerm.TermKind gorm tag = %q; want controlled term_kind check", termKindTag)
+	}
+}
+
+func TestFeaturedCandidateSchemaContract(t *testing.T) {
+	t.Parallel()
+
+	parsedSchema := mustParseModelSchema(t, FeaturedCandidate{})
+	assertOneToOnePrimaryKeyFieldContract(t, FeaturedCandidate{}, parsedSchema, "EntryID")
+
+	for _, fieldName := range []string{
+		"Headword",
+		"NormalizedHeadword",
+		"IsMultiword",
+		"Pos",
+		"FrequencyRank",
+		"CEFRLevel",
+		"OxfordLevel",
+		"CETLevel",
+		"CollinsStars",
+		"QualityRank",
+	} {
+		if parsedSchema.LookUpField(fieldName) == nil {
+			t.Fatalf("FeaturedCandidate schema field %s not found", fieldName)
+		}
 	}
 }
 

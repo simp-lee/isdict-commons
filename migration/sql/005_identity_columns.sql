@@ -23,7 +23,8 @@ BEGIN
 		'pronunciation_audios',
 		'entry_forms',
 		'lexical_relations',
-		'entry_summaries_zh'
+		'entry_summaries_zh',
+		'entry_search_terms'
 	] LOOP
 		qualified_table := format('%I.%I', active_schema, target_table);
 
