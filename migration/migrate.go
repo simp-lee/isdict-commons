@@ -120,6 +120,7 @@ var expectedIndexes = []indexTarget{
 	{TableName: "senses", Model: &model.Sense{}, IndexName: "idx_senses_entry_id_sense_order"},
 	{TableName: "sense_glosses_en", Model: &model.SenseGlossEN{}, IndexName: "idx_sense_glosses_en_sense_id_gloss_order"},
 	{TableName: "sense_glosses_zh", Model: &model.SenseGlossZH{}, IndexName: "idx_sense_glosses_zh_sense_id_source_gloss_order"},
+	{TableName: "sense_glosses_zh", Model: &model.SenseGlossZH{}, IndexName: "idx_sense_glosses_zh_sense_id_text_zh_hans"},
 	{TableName: "sense_glosses_zh", Model: &model.SenseGlossZH{}, IndexName: "idx_sense_glosses_zh_sense_id_gloss_order"},
 	{TableName: "sense_glosses_zh", Model: &model.SenseGlossZH{}, IndexName: "idx_sense_glosses_zh_source_run_id"},
 	{TableName: "sense_glosses_zh", Model: &model.SenseGlossZH{}, IndexName: "idx_sense_glosses_zh_sense_id_source_primary"},

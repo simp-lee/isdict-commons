@@ -195,6 +195,7 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "senses", IndexName: "idx_senses_entry_id_sense_order"},
 	{TableName: "sense_glosses_en", IndexName: "idx_sense_glosses_en_sense_id_gloss_order"},
 	{TableName: "sense_glosses_zh", IndexName: "idx_sense_glosses_zh_sense_id_source_gloss_order"},
+	{TableName: "sense_glosses_zh", IndexName: "idx_sense_glosses_zh_sense_id_text_zh_hans"},
 	{TableName: "sense_glosses_zh", IndexName: "idx_sense_glosses_zh_sense_id_gloss_order"},
 	{TableName: "sense_glosses_zh", IndexName: "idx_sense_glosses_zh_source_run_id"},
 	{TableName: "sense_glosses_zh", IndexName: "idx_sense_glosses_zh_sense_id_source_primary"},
@@ -410,6 +411,13 @@ var postgresIntegrationExpectedGORMIndexDefinitions = []sqlIndexDefinitionTarget
 		Unique:    true,
 		Method:    "btree",
 		Columns:   []string{"sense_id", "source", "gloss_order"},
+	},
+	{
+		TableName: "sense_glosses_zh",
+		IndexName: "idx_sense_glosses_zh_sense_id_text_zh_hans",
+		Unique:    true,
+		Method:    "btree",
+		Columns:   []string{"sense_id", "text_zh_hans"},
 	},
 	{
 		TableName: "sense_glosses_zh",

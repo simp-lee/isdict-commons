@@ -52,11 +52,11 @@ func (SenseGlossEN) TableName() string {
 type SenseGlossZH struct {
 	ID int64 `gorm:"primaryKey;autoIncrement:false;default:(-);type:bigint"`
 
-	SenseID      int64   `gorm:"type:bigint;autoIncrement:false;not null;uniqueIndex:idx_sense_glosses_zh_sense_id_source_gloss_order,priority:1;index:idx_sense_glosses_zh_sense_id_gloss_order,priority:1"`
+	SenseID      int64   `gorm:"type:bigint;autoIncrement:false;not null;uniqueIndex:idx_sense_glosses_zh_sense_id_source_gloss_order,priority:1;uniqueIndex:idx_sense_glosses_zh_sense_id_text_zh_hans,priority:1;index:idx_sense_glosses_zh_sense_id_gloss_order,priority:1"`
 	Source       string  `gorm:"type:text;not null;uniqueIndex:idx_sense_glosses_zh_sense_id_source_gloss_order,priority:2"`
 	SourceRunID  int64   `gorm:"type:bigint;autoIncrement:false;not null;index:idx_sense_glosses_zh_source_run_id"`
 	GlossOrder   int16   `gorm:"type:smallint;not null;check:gloss_order >= 1;uniqueIndex:idx_sense_glosses_zh_sense_id_source_gloss_order,priority:3;index:idx_sense_glosses_zh_sense_id_gloss_order,priority:2"`
-	TextZHHans   string  `gorm:"column:text_zh_hans;type:text;not null"`
+	TextZHHans   string  `gorm:"column:text_zh_hans;type:text;not null;uniqueIndex:idx_sense_glosses_zh_sense_id_text_zh_hans,priority:2"`
 	DialectCode  *string `gorm:"type:text"`
 	Romanization *string `gorm:"type:text"`
 	IsPrimary    bool    `gorm:"type:boolean;not null;default:false"`

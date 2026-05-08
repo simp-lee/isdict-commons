@@ -206,6 +206,46 @@ func TestSenseGlossZHExposesSourceRunIDField(t *testing.T) {
 	}
 }
 
+func TestSenseGlossZHChineseDisplayTextUniqueIndexContract(t *testing.T) {
+	t.Parallel()
+
+	const indexName = "idx_sense_glosses_zh_sense_id_text_zh_hans"
+	tests := []gormTagExpectation{
+		{name: "sense_id", model: SenseGlossZH{}, fieldName: "SenseID", wantFragment: "uniqueIndex:" + indexName + ",priority:1"},
+		{name: "text_zh_hans", model: SenseGlossZH{}, fieldName: "TextZHHans", wantFragment: "uniqueIndex:" + indexName + ",priority:2"},
+	}
+
+	for _, tt := range tests {
+		field := mustStructField(t, tt.model, tt.fieldName)
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, tt.wantFragment) {
+			t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
+		}
+	}
+
+	parsedSchema := mustParseModelSchema(t, SenseGlossZH{})
+	index := parsedSchema.LookIndex(indexName)
+	if index == nil {
+		t.Fatalf("SenseGlossZH schema index %q not found", indexName)
+	}
+	if !strings.EqualFold(index.Class, "UNIQUE") {
+		t.Fatalf("SenseGlossZH schema index %q class = %q; want UNIQUE", indexName, index.Class)
+	}
+
+	gotColumns := make([]string, 0, len(index.Fields))
+	for _, field := range index.Fields {
+		if field.Field == nil {
+			gotColumns = append(gotColumns, "")
+			continue
+		}
+		gotColumns = append(gotColumns, field.Field.DBName)
+	}
+	wantColumns := []string{"sense_id", "text_zh_hans"}
+	if !reflect.DeepEqual(gotColumns, wantColumns) {
+		t.Fatalf("SenseGlossZH schema index %q columns = %v; want %v", indexName, gotColumns, wantColumns)
+	}
+}
+
 func TestForeignKeysAsPrimaryKeysRemainOneToOneContracts(t *testing.T) {
 	t.Parallel()
 
