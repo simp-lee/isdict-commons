@@ -1,6 +1,9 @@
 package model
 
-import "maps"
+import (
+	"maps"
+	"strings"
+)
 
 const (
 	POSNoun         = "noun"
@@ -159,17 +162,94 @@ const (
 )
 
 const (
-	RelationTypeSynonym        = "synonym"
-	RelationTypeAntonym        = "antonym"
-	RelationTypeDerived        = "derived"
-	RelationTypeRelated        = "related"
-	RelationTypeHypernym       = "hypernym"
-	RelationTypeHyponym        = "hyponym"
-	RelationTypeCoordinateTerm = "coordinate_term"
-	RelationTypeMeronym        = "meronym"
-	RelationTypeHolonym        = "holonym"
-	RelationTypeTroponym       = "troponym"
-	RelationTypeInstance       = "instance"
+	RelationTypeSynonym      = "synonym"
+	RelationTypeAntonym      = "antonym"
+	RelationTypeHypernym     = "hypernym"
+	RelationTypeHyponym      = "hyponym"
+	RelationTypeMeronym      = "meronym"
+	RelationTypeHolonym      = "holonym"
+	RelationTypeSimilarTo    = "similar_to"
+	RelationTypeAlsoSee      = "also_see"
+	RelationTypeDerivation   = "derivation"
+	RelationTypePertainym    = "pertainym"
+	RelationTypeDomainTopic  = "domain_topic"
+	RelationTypeDomainRegion = "domain_region"
+	RelationTypeExemplifies  = "exemplifies"
+	RelationTypeAttribute    = "attribute"
+	RelationTypeEntails      = "entails"
+	RelationTypeCauses       = "causes"
+	RelationTypeEvent        = "event"
+	RelationTypeAgent        = "agent"
+	RelationTypeResult       = "result"
+	RelationTypeByMeansOf    = "by_means_of"
+	RelationTypeUndergoer    = "undergoer"
+	RelationTypeInstrument   = "instrument"
+	RelationTypeUses         = "uses"
+	RelationTypeState        = "state"
+	RelationTypeProperty     = "property"
+	RelationTypeLocation     = "location"
+	RelationTypeMaterial     = "material"
+	RelationTypeVehicle      = "vehicle"
+	RelationTypeParticiple   = "participle"
+	RelationTypeBodyPart     = "body_part"
+	RelationTypeDestination  = "destination"
+)
+
+const (
+	OEWNSourceRelationMembers       = "members"
+	OEWNSourceRelationAntonym       = "antonym"
+	OEWNSourceRelationDerivation    = "derivation"
+	OEWNSourceRelationPertainym     = "pertainym"
+	OEWNSourceRelationHypernym      = "hypernym"
+	OEWNSourceRelationMeroPart      = "mero_part"
+	OEWNSourceRelationMeroMember    = "mero_member"
+	OEWNSourceRelationMeroSubstance = "mero_substance"
+	OEWNSourceRelationSimilar       = "similar"
+	OEWNSourceRelationAlso          = "also"
+	OEWNSourceRelationDomainTopic   = "domain_topic"
+	OEWNSourceRelationDomainRegion  = "domain_region"
+	OEWNSourceRelationExemplifies   = "exemplifies"
+	OEWNSourceRelationAttribute     = "attribute"
+	OEWNSourceRelationEntails       = "entails"
+	OEWNSourceRelationCauses        = "causes"
+	OEWNSourceRelationEvent         = "event"
+	OEWNSourceRelationAgent         = "agent"
+	OEWNSourceRelationResult        = "result"
+	OEWNSourceRelationByMeansOf     = "by_means_of"
+	OEWNSourceRelationUndergoer     = "undergoer"
+	OEWNSourceRelationInstrument    = "instrument"
+	OEWNSourceRelationUses          = "uses"
+	OEWNSourceRelationState         = "state"
+	OEWNSourceRelationProperty      = "property"
+	OEWNSourceRelationLocation      = "location"
+	OEWNSourceRelationMaterial      = "material"
+	OEWNSourceRelationVehicle       = "vehicle"
+	OEWNSourceRelationParticiple    = "participle"
+	OEWNSourceRelationBodyPart      = "body_part"
+	OEWNSourceRelationDestination   = "destination"
+)
+
+const (
+	OEWNPartOfSpeechCodeNoun               = "n"
+	OEWNPartOfSpeechCodeVerb               = "v"
+	OEWNPartOfSpeechCodeAdjective          = "a"
+	OEWNPartOfSpeechCodeSatelliteAdjective = "s"
+	OEWNPartOfSpeechCodeAdverb             = "r"
+)
+
+const (
+	OEWNSenseTypeNoun               = 1
+	OEWNSenseTypeVerb               = 2
+	OEWNSenseTypeAdjective          = 3
+	OEWNSenseTypeAdverb             = 4
+	OEWNSenseTypeSatelliteAdjective = 5
+)
+
+const (
+	HeadwordRelationPOSCodeNoun      = 1
+	HeadwordRelationPOSCodeVerb      = 2
+	HeadwordRelationPOSCodeAdjective = 3
+	HeadwordRelationPOSCodeAdverb    = 4
 )
 
 const (
@@ -395,19 +475,97 @@ var (
 	validLabelCodesByType = nestedKeySet(labelCodeToNameByType)
 
 	relationTypeCodeToName = map[string]string{
-		RelationTypeSynonym:        "Synonym",
-		RelationTypeAntonym:        "Antonym",
-		RelationTypeDerived:        "Derived",
-		RelationTypeRelated:        "Related",
-		RelationTypeHypernym:       "Hypernym",
-		RelationTypeHyponym:        "Hyponym",
-		RelationTypeCoordinateTerm: "Coordinate Term",
-		RelationTypeMeronym:        "Meronym",
-		RelationTypeHolonym:        "Holonym",
-		RelationTypeTroponym:       "Troponym",
-		RelationTypeInstance:       "Instance",
+		RelationTypeSynonym:      "Synonym",
+		RelationTypeAntonym:      "Antonym",
+		RelationTypeHypernym:     "Hypernym",
+		RelationTypeHyponym:      "Hyponym",
+		RelationTypeMeronym:      "Meronym",
+		RelationTypeHolonym:      "Holonym",
+		RelationTypeSimilarTo:    "Similar To",
+		RelationTypeAlsoSee:      "Also See",
+		RelationTypeDerivation:   "Derivation",
+		RelationTypePertainym:    "Pertainym",
+		RelationTypeDomainTopic:  "Domain Topic",
+		RelationTypeDomainRegion: "Domain Region",
+		RelationTypeExemplifies:  "Exemplifies",
+		RelationTypeAttribute:    "Attribute",
+		RelationTypeEntails:      "Entails",
+		RelationTypeCauses:       "Causes",
+		RelationTypeEvent:        "Event",
+		RelationTypeAgent:        "Agent",
+		RelationTypeResult:       "Result",
+		RelationTypeByMeansOf:    "By Means Of",
+		RelationTypeUndergoer:    "Undergoer",
+		RelationTypeInstrument:   "Instrument",
+		RelationTypeUses:         "Uses",
+		RelationTypeState:        "State",
+		RelationTypeProperty:     "Property",
+		RelationTypeLocation:     "Location",
+		RelationTypeMaterial:     "Material",
+		RelationTypeVehicle:      "Vehicle",
+		RelationTypeParticiple:   "Participle",
+		RelationTypeBodyPart:     "Body Part",
+		RelationTypeDestination:  "Destination",
 	}
 	relationTypeNameToCode = invertStringMap(relationTypeCodeToName)
+
+	headwordRelationPOSCodeToName = map[int]string{
+		HeadwordRelationPOSCodeNoun:      "Noun",
+		HeadwordRelationPOSCodeVerb:      "Verb",
+		HeadwordRelationPOSCodeAdjective: "Adjective",
+		HeadwordRelationPOSCodeAdverb:    "Adverb",
+	}
+	headwordRelationPOSNameToCode = invertIntMap(headwordRelationPOSCodeToName)
+
+	validOEWNSourceRelations = map[string]struct{}{
+		OEWNSourceRelationMembers:       {},
+		OEWNSourceRelationAntonym:       {},
+		OEWNSourceRelationDerivation:    {},
+		OEWNSourceRelationPertainym:     {},
+		OEWNSourceRelationHypernym:      {},
+		OEWNSourceRelationMeroPart:      {},
+		OEWNSourceRelationMeroMember:    {},
+		OEWNSourceRelationMeroSubstance: {},
+		OEWNSourceRelationSimilar:       {},
+		OEWNSourceRelationAlso:          {},
+		OEWNSourceRelationDomainTopic:   {},
+		OEWNSourceRelationDomainRegion:  {},
+		OEWNSourceRelationExemplifies:   {},
+		OEWNSourceRelationAttribute:     {},
+		OEWNSourceRelationEntails:       {},
+		OEWNSourceRelationCauses:        {},
+		OEWNSourceRelationEvent:         {},
+		OEWNSourceRelationAgent:         {},
+		OEWNSourceRelationResult:        {},
+		OEWNSourceRelationByMeansOf:     {},
+		OEWNSourceRelationUndergoer:     {},
+		OEWNSourceRelationInstrument:    {},
+		OEWNSourceRelationUses:          {},
+		OEWNSourceRelationState:         {},
+		OEWNSourceRelationProperty:      {},
+		OEWNSourceRelationLocation:      {},
+		OEWNSourceRelationMaterial:      {},
+		OEWNSourceRelationVehicle:       {},
+		OEWNSourceRelationParticiple:    {},
+		OEWNSourceRelationBodyPart:      {},
+		OEWNSourceRelationDestination:   {},
+	}
+
+	oewnPartOfSpeechCodeToHeadwordRelationPOSCode = map[string]int{
+		OEWNPartOfSpeechCodeNoun:               HeadwordRelationPOSCodeNoun,
+		OEWNPartOfSpeechCodeVerb:               HeadwordRelationPOSCodeVerb,
+		OEWNPartOfSpeechCodeAdjective:          HeadwordRelationPOSCodeAdjective,
+		OEWNPartOfSpeechCodeSatelliteAdjective: HeadwordRelationPOSCodeAdjective,
+		OEWNPartOfSpeechCodeAdverb:             HeadwordRelationPOSCodeAdverb,
+	}
+
+	oewnSenseTypeToHeadwordRelationPOSCode = map[int]int{
+		OEWNSenseTypeNoun:               HeadwordRelationPOSCodeNoun,
+		OEWNSenseTypeVerb:               HeadwordRelationPOSCodeVerb,
+		OEWNSenseTypeAdjective:          HeadwordRelationPOSCodeAdjective,
+		OEWNSenseTypeAdverb:             HeadwordRelationPOSCodeAdverb,
+		OEWNSenseTypeSatelliteAdjective: HeadwordRelationPOSCodeAdjective,
+	}
 
 	relationKindCodeToName = map[string]string{
 		RelationKindForm:  "Form",
@@ -526,6 +684,39 @@ func RelationTypeCodeToName() map[string]string {
 
 func RelationTypeNameToCode() map[string]string {
 	return cloneMap(relationTypeNameToCode)
+}
+
+func HeadwordRelationPOSCodeToName() map[int]string {
+	return cloneMap(headwordRelationPOSCodeToName)
+}
+
+func HeadwordRelationPOSNameToCode() map[string]int {
+	return cloneMap(headwordRelationPOSNameToCode)
+}
+
+func ValidOEWNSourceRelations() map[string]struct{} {
+	return cloneMap(validOEWNSourceRelations)
+}
+
+func OEWNPartOfSpeechCodeToHeadwordRelationPOSCode() map[string]int {
+	return cloneMap(oewnPartOfSpeechCodeToHeadwordRelationPOSCode)
+}
+
+func OEWNSenseTypeToHeadwordRelationPOSCode() map[int]int {
+	return cloneMap(oewnSenseTypeToHeadwordRelationPOSCode)
+}
+
+func HeadwordRelationPOSCodeFromOEWNPartOfSpeech(code string) (int, bool) {
+	baseCode, _, _ := strings.Cut(code, "-")
+	relationPOSCode, ok := oewnPartOfSpeechCodeToHeadwordRelationPOSCode[baseCode]
+
+	return relationPOSCode, ok
+}
+
+func HeadwordRelationPOSCodeFromOEWNSenseType(code int) (int, bool) {
+	relationPOSCode, ok := oewnSenseTypeToHeadwordRelationPOSCode[code]
+
+	return relationPOSCode, ok
 }
 
 func RelationKindCodeToName() map[string]string {
@@ -651,6 +842,14 @@ func invertNestedStringMap(groups map[string]map[string]string) map[string]map[s
 
 func invertInt16Map(values map[int16]string) map[string]int16 {
 	inverted := make(map[string]int16, len(values))
+	for code, name := range values {
+		inverted[name] = code
+	}
+	return inverted
+}
+
+func invertIntMap(values map[int]string) map[string]int {
+	inverted := make(map[string]int, len(values))
 	for code, name := range values {
 		inverted[name] = code
 	}

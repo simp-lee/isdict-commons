@@ -28,24 +28,4 @@ BEGIN
 		'ALTER TABLE %s ADD CONSTRAINT chk_sense_labels_label_type CHECK (label_type IN (''grammar'',''register'',''region'',''temporal'',''domain'',''attitude'',''variety''))',
 		qualified_table
 	);
-
-	qualified_table := format('%I.%I', active_schema, 'lexical_relations');
-
-	FOR target_constraint IN
-		SELECT con.conname
-		FROM pg_constraint con
-		JOIN pg_class cls ON cls.oid = con.conrelid
-		JOIN pg_namespace nsp ON nsp.oid = cls.relnamespace
-		WHERE nsp.nspname = active_schema
-		  AND cls.relname = 'lexical_relations'
-		  AND con.contype = 'c'
-		  AND pg_get_constraintdef(con.oid) LIKE '%relation_type%'
-	LOOP
-		EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', qualified_table, target_constraint);
-	END LOOP;
-
-	EXECUTE format(
-		'ALTER TABLE %s ADD CONSTRAINT chk_lexical_relations_relation_type CHECK (relation_type IN (''synonym'',''antonym'',''derived'',''related'',''hypernym'',''hyponym'',''coordinate_term'',''meronym'',''holonym'',''troponym'',''instance''))',
-		qualified_table
-	);
 END $$;

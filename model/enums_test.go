@@ -156,17 +156,94 @@ var (
 	}
 
 	step35ExpectedRelationTypeCodeToName = map[string]string{
-		"synonym":         "Synonym",
-		"antonym":         "Antonym",
-		"derived":         "Derived",
-		"related":         "Related",
-		"hypernym":        "Hypernym",
-		"hyponym":         "Hyponym",
-		"coordinate_term": "Coordinate Term",
-		"meronym":         "Meronym",
-		"holonym":         "Holonym",
-		"troponym":        "Troponym",
-		"instance":        "Instance",
+		"synonym":       "Synonym",
+		"antonym":       "Antonym",
+		"hypernym":      "Hypernym",
+		"hyponym":       "Hyponym",
+		"meronym":       "Meronym",
+		"holonym":       "Holonym",
+		"similar_to":    "Similar To",
+		"also_see":      "Also See",
+		"derivation":    "Derivation",
+		"pertainym":     "Pertainym",
+		"domain_topic":  "Domain Topic",
+		"domain_region": "Domain Region",
+		"exemplifies":   "Exemplifies",
+		"attribute":     "Attribute",
+		"entails":       "Entails",
+		"causes":        "Causes",
+		"event":         "Event",
+		"agent":         "Agent",
+		"result":        "Result",
+		"by_means_of":   "By Means Of",
+		"undergoer":     "Undergoer",
+		"instrument":    "Instrument",
+		"uses":          "Uses",
+		"state":         "State",
+		"property":      "Property",
+		"location":      "Location",
+		"material":      "Material",
+		"vehicle":       "Vehicle",
+		"participle":    "Participle",
+		"body_part":     "Body Part",
+		"destination":   "Destination",
+	}
+
+	step35ExpectedHeadwordRelationPOSCodeToName = map[int]string{
+		1: "Noun",
+		2: "Verb",
+		3: "Adjective",
+		4: "Adverb",
+	}
+
+	step35ExpectedOEWNSourceRelations = map[string]string{
+		"members":        "",
+		"antonym":        "",
+		"derivation":     "",
+		"pertainym":      "",
+		"hypernym":       "",
+		"mero_part":      "",
+		"mero_member":    "",
+		"mero_substance": "",
+		"similar":        "",
+		"also":           "",
+		"domain_topic":   "",
+		"domain_region":  "",
+		"exemplifies":    "",
+		"attribute":      "",
+		"entails":        "",
+		"causes":         "",
+		"event":          "",
+		"agent":          "",
+		"result":         "",
+		"by_means_of":    "",
+		"undergoer":      "",
+		"instrument":     "",
+		"uses":           "",
+		"state":          "",
+		"property":       "",
+		"location":       "",
+		"material":       "",
+		"vehicle":        "",
+		"participle":     "",
+		"body_part":      "",
+		"destination":    "",
+	}
+
+	step35ExpectedOEWNPartOfSpeechCodeToHeadwordRelationPOSCode = map[string]int{
+		"n": 1,
+		"v": 2,
+		"a": 3,
+		"s": 3,
+		"r": 4,
+	}
+
+	step35ExpectedOEWNSenseTypeToHeadwordRelationPOSCode = map[int]int{
+		1: 1,
+		2: 2,
+		3: 3,
+		4: 4,
+		5: 3,
 	}
 
 	step35ExpectedRelationKindCodeToName = map[string]string{
@@ -309,6 +386,66 @@ func TestStep35RelationTypesAreCompleteAndBidirectional(t *testing.T) {
 	t.Parallel()
 
 	assertStringEnumBijection(t, RelationTypeCodeToName(), RelationTypeNameToCode(), step35ExpectedRelationTypeCodeToName)
+}
+
+func TestStep35HeadwordRelationPOSMappingsAreCompleteAndBidirectional(t *testing.T) {
+	t.Parallel()
+
+	assertIntEnumBijection(t, HeadwordRelationPOSCodeToName(), HeadwordRelationPOSNameToCode(), step35ExpectedHeadwordRelationPOSCodeToName)
+}
+
+func TestStep35OEWNSourceRelationsMatch2025JSONFields(t *testing.T) {
+	t.Parallel()
+
+	assertStringSetMatchesExpected(t, ValidOEWNSourceRelations(), step35ExpectedOEWNSourceRelations)
+}
+
+func TestStep35OEWNPOSMappingsMatch2025JSON(t *testing.T) {
+	t.Parallel()
+
+	assertStringIntMapMatchesExpected(t, OEWNPartOfSpeechCodeToHeadwordRelationPOSCode(), step35ExpectedOEWNPartOfSpeechCodeToHeadwordRelationPOSCode)
+	assertIntIntMapMatchesExpected(t, OEWNSenseTypeToHeadwordRelationPOSCode(), step35ExpectedOEWNSenseTypeToHeadwordRelationPOSCode)
+
+	for _, tt := range []struct {
+		name     string
+		rawCode  string
+		wantCode int
+		wantOK   bool
+	}{
+		{name: "noun", rawCode: OEWNPartOfSpeechCodeNoun, wantCode: HeadwordRelationPOSCodeNoun, wantOK: true},
+		{name: "verb", rawCode: OEWNPartOfSpeechCodeVerb, wantCode: HeadwordRelationPOSCodeVerb, wantOK: true},
+		{name: "adjective", rawCode: OEWNPartOfSpeechCodeAdjective, wantCode: HeadwordRelationPOSCodeAdjective, wantOK: true},
+		{name: "satellite_adjective", rawCode: OEWNPartOfSpeechCodeSatelliteAdjective, wantCode: HeadwordRelationPOSCodeAdjective, wantOK: true},
+		{name: "adverb", rawCode: OEWNPartOfSpeechCodeAdverb, wantCode: HeadwordRelationPOSCodeAdverb, wantOK: true},
+		{name: "numbered_noun_entry_key", rawCode: "n-2", wantCode: HeadwordRelationPOSCodeNoun, wantOK: true},
+		{name: "numbered_verb_entry_key", rawCode: "v-1", wantCode: HeadwordRelationPOSCodeVerb, wantOK: true},
+		{name: "unknown", rawCode: "x", wantOK: false},
+		{name: "empty", rawCode: "", wantOK: false},
+	} {
+		gotCode, gotOK := HeadwordRelationPOSCodeFromOEWNPartOfSpeech(tt.rawCode)
+		if gotCode != tt.wantCode || gotOK != tt.wantOK {
+			t.Fatalf("HeadwordRelationPOSCodeFromOEWNPartOfSpeech(%q) = (%d, %v); want (%d, %v)", tt.rawCode, gotCode, gotOK, tt.wantCode, tt.wantOK)
+		}
+	}
+
+	for _, tt := range []struct {
+		name     string
+		rawCode  int
+		wantCode int
+		wantOK   bool
+	}{
+		{name: "noun", rawCode: OEWNSenseTypeNoun, wantCode: HeadwordRelationPOSCodeNoun, wantOK: true},
+		{name: "verb", rawCode: OEWNSenseTypeVerb, wantCode: HeadwordRelationPOSCodeVerb, wantOK: true},
+		{name: "adjective", rawCode: OEWNSenseTypeAdjective, wantCode: HeadwordRelationPOSCodeAdjective, wantOK: true},
+		{name: "adverb", rawCode: OEWNSenseTypeAdverb, wantCode: HeadwordRelationPOSCodeAdverb, wantOK: true},
+		{name: "satellite_adjective", rawCode: OEWNSenseTypeSatelliteAdjective, wantCode: HeadwordRelationPOSCodeAdjective, wantOK: true},
+		{name: "unknown", rawCode: 0, wantOK: false},
+	} {
+		gotCode, gotOK := HeadwordRelationPOSCodeFromOEWNSenseType(tt.rawCode)
+		if gotCode != tt.wantCode || gotOK != tt.wantOK {
+			t.Fatalf("HeadwordRelationPOSCodeFromOEWNSenseType(%d) = (%d, %v); want (%d, %v)", tt.rawCode, gotCode, gotOK, tt.wantCode, tt.wantOK)
+		}
+	}
 }
 
 func TestStep35RelationKindsAreCompleteAndBidirectional(t *testing.T) {
@@ -455,6 +592,44 @@ func TestStep35EnumAccessorsReturnDefensiveCopies(t *testing.T) {
 
 		assertInt16EnumBijection(t, SchoolLevelCodeToName(), SchoolLevelNameToCode(), step35ExpectedSchoolLevelCodeToName)
 	})
+
+	t.Run("headword_relation_pos", func(t *testing.T) {
+		t.Parallel()
+
+		gotCodeToName := HeadwordRelationPOSCodeToName()
+		gotNameToCode := HeadwordRelationPOSNameToCode()
+
+		gotCodeToName[HeadwordRelationPOSCodeNoun] = "Mutated"
+		gotNameToCode["Mutated"] = HeadwordRelationPOSCodeNoun
+		delete(gotNameToCode, "Noun")
+
+		assertIntEnumBijection(t, HeadwordRelationPOSCodeToName(), HeadwordRelationPOSNameToCode(), step35ExpectedHeadwordRelationPOSCodeToName)
+	})
+
+	t.Run("oewn_source_relations", func(t *testing.T) {
+		t.Parallel()
+
+		gotValidRelations := ValidOEWNSourceRelations()
+		gotValidRelations["related"] = struct{}{}
+		delete(gotValidRelations, OEWNSourceRelationMembers)
+
+		assertStringSetMatchesExpected(t, ValidOEWNSourceRelations(), step35ExpectedOEWNSourceRelations)
+	})
+
+	t.Run("oewn_pos_mapping", func(t *testing.T) {
+		t.Parallel()
+
+		gotPartOfSpeechMap := OEWNPartOfSpeechCodeToHeadwordRelationPOSCode()
+		gotSenseTypeMap := OEWNSenseTypeToHeadwordRelationPOSCode()
+
+		gotPartOfSpeechMap[OEWNPartOfSpeechCodeNoun] = HeadwordRelationPOSCodeAdverb
+		gotPartOfSpeechMap["x"] = HeadwordRelationPOSCodeNoun
+		gotSenseTypeMap[OEWNSenseTypeNoun] = HeadwordRelationPOSCodeAdverb
+		gotSenseTypeMap[0] = HeadwordRelationPOSCodeNoun
+
+		assertStringIntMapMatchesExpected(t, OEWNPartOfSpeechCodeToHeadwordRelationPOSCode(), step35ExpectedOEWNPartOfSpeechCodeToHeadwordRelationPOSCode)
+		assertIntIntMapMatchesExpected(t, OEWNSenseTypeToHeadwordRelationPOSCode(), step35ExpectedOEWNSenseTypeToHeadwordRelationPOSCode)
+	})
 }
 
 func assertStringEnumBijection(t *testing.T, gotCodeToName, gotNameToCode, wantCodeToName map[string]string) {
@@ -547,6 +722,97 @@ func assertInt16EnumBijection(t *testing.T, gotCodeToName map[int16]string, gotN
 		}
 		if !found {
 			t.Fatalf("nameToCode contains unexpected name %q", name)
+		}
+	}
+}
+
+func assertIntEnumBijection(t *testing.T, gotCodeToName map[int]string, gotNameToCode map[string]int, wantCodeToName map[int]string) {
+	t.Helper()
+
+	if got := len(gotCodeToName); got != len(wantCodeToName) {
+		t.Fatalf("len(codeToName) = %d; want %d", got, len(wantCodeToName))
+	}
+	if got := len(gotNameToCode); got != len(wantCodeToName) {
+		t.Fatalf("len(nameToCode) = %d; want %d", got, len(wantCodeToName))
+	}
+
+	for code, wantName := range wantCodeToName {
+		gotName, ok := gotCodeToName[code]
+		if !ok {
+			t.Fatalf("codeToName missing code %d", code)
+		}
+		if gotName != wantName {
+			t.Fatalf("codeToName[%d] = %q; want %q", code, gotName, wantName)
+		}
+
+		gotCode, ok := gotNameToCode[wantName]
+		if !ok {
+			t.Fatalf("nameToCode missing name %q", wantName)
+		}
+		if gotCode != code {
+			t.Fatalf("nameToCode[%q] = %d; want %d", wantName, gotCode, code)
+		}
+	}
+
+	for code := range gotCodeToName {
+		if _, ok := wantCodeToName[code]; !ok {
+			t.Fatalf("codeToName contains unexpected code %d", code)
+		}
+	}
+	for name := range gotNameToCode {
+		found := false
+		for _, wantName := range wantCodeToName {
+			if wantName == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("nameToCode contains unexpected name %q", name)
+		}
+	}
+}
+
+func assertStringIntMapMatchesExpected(t *testing.T, got, want map[string]int) {
+	t.Helper()
+
+	if len(got) != len(want) {
+		t.Fatalf("len(got) = %d; want %d", len(got), len(want))
+	}
+	for key, wantValue := range want {
+		gotValue, ok := got[key]
+		if !ok {
+			t.Fatalf("map missing key %q", key)
+		}
+		if gotValue != wantValue {
+			t.Fatalf("map[%q] = %d; want %d", key, gotValue, wantValue)
+		}
+	}
+	for key := range got {
+		if _, ok := want[key]; !ok {
+			t.Fatalf("map contains unexpected key %q", key)
+		}
+	}
+}
+
+func assertIntIntMapMatchesExpected(t *testing.T, got, want map[int]int) {
+	t.Helper()
+
+	if len(got) != len(want) {
+		t.Fatalf("len(got) = %d; want %d", len(got), len(want))
+	}
+	for key, wantValue := range want {
+		gotValue, ok := got[key]
+		if !ok {
+			t.Fatalf("map missing key %d", key)
+		}
+		if gotValue != wantValue {
+			t.Fatalf("map[%d] = %d; want %d", key, gotValue, wantValue)
+		}
+	}
+	for key := range got {
+		if _, ok := want[key]; !ok {
+			t.Fatalf("map contains unexpected key %d", key)
 		}
 	}
 }

@@ -38,7 +38,7 @@ The model package maps to these 19 tables:
 | `pronunciation_ipas` | `PronunciationIPA` | IPA pronunciations |
 | `pronunciation_audios` | `PronunciationAudio` | Audio filename records |
 | `entry_forms` | `EntryForm` | Forms and aliases |
-| `lexical_relations` | `LexicalRelation` | Synonym, antonym, and derived links |
+| `headword_relation_edges` | `HeadwordRelationEdge` | OEWN headword/POS lexical relation edges |
 | `entry_summaries_zh` | `EntrySummaryZH` | Chinese summaries |
 | `entry_learning_signals` | `EntryLearningSignal` | Entry-level learner annotations |
 | `entry_cefr_source_signals` | `EntryCEFRSourceSignal` | Entry-level CEFR source evidence |
@@ -60,6 +60,16 @@ Search consumers should use `entry_search_terms.normalized_term`, not trigram-se
 
 Both read models are maintained by migration/import refresh code; they are not business source data. `RunMigration` refreshes them once after schema/index migration, and full importers should call `migration.RefreshReadModels(db)` after `entries`, `entry_forms`, and `entry_learning_signals` are loaded.
 
+### Lexical Relations
+
+`headword_relation_edges` is the product relation table. Each row is an OEWN-owned evidence edge from a source normalized headword plus POS code to a target normalized headword plus POS code, with required `import_run_id` provenance. Product relation types cover the OEWN 2025 synset and sense relation payloads: `synonym`, `antonym`, `hypernym`, `hyponym`, `meronym`, `holonym`, `similar_to`, `also_see`, `derivation`, `pertainym`, `domain_topic`, `domain_region`, `exemplifies`, `attribute`, `entails`, `causes`, `event`, `agent`, `result`, `by_means_of`, `undergoer`, `instrument`, `uses`, `state`, `property`, `location`, `material`, `vehicle`, `participle`, `body_part`, and `destination`.
+
+`source_relation_type` stores the exact OEWN JSON field that produced the edge. It is limited to the real 2025 relation fields used by synsets or entry senses: `members`, `antonym`, `derivation`, `pertainym`, `hypernym`, `mero_part`, `mero_member`, `mero_substance`, `similar`, `also`, `domain_topic`, `domain_region`, `exemplifies`, `attribute`, `entails`, `causes`, `event`, `agent`, `result`, `by_means_of`, `undergoer`, `instrument`, `uses`, `state`, `property`, `location`, `material`, `vehicle`, `participle`, `body_part`, and `destination`. OEWN metadata fields such as definitions, examples, ILI, Wikidata IDs, verb frames, subcategories, and adjective positions are not relation edges.
+
+OEWN raw POS values are collapsed to four product POS codes for relation lookup: `n -> Noun`, `v -> Verb`, `a/s -> Adjective`, and `r -> Adverb`. Numbered entry POS keys such as `n-1` and `v-2` use the same base-code mapping.
+
+Open English WordNet 2025 Edition is the only lexical relation source. Wiktionary/Kaikki still supplies entries, senses, glosses, examples, pronunciations, forms, aliases, phrase entries, and etymology text, but Wiktionary/Kaikki relation data is not imported or displayed. Wiktionary `derived` data is intentionally outside the lexical relation module.
+
 ### Learning And CEFR Signals
 
 `entry_learning_signals.cefr_level` and `sense_learning_signals.cefr_level` store the final aggregated CEFR level used by downstream queries. CEFR levels use `0..6`: `unknown=0`, `A1=1`, `A2=2`, `B1=3`, `B2=4`, `C1=5`, `C2=6`. The aggregate `cefr_source` is either unset (`''`) or the real adopted source: `oxford`, `cefrj`, or `octanove`.
@@ -75,7 +85,7 @@ Both read models are maintained by migration/import refresh code; they are not b
 - POS: 23 text codes via `POS*`, `POSCodeToName`, `POSNameToCode`, and `ValidPOSCodes`
 - Accent: 11 text codes via `Accent*`, `AccentCodeToName`, and `AccentNameToCode`
 - Controlled sense labels: 85 label codes across `grammar`, `register`, `region`, `temporal`, `domain`, `attitude`, and `variety`, exposed through `LabelType*`, `LabelCodeToNameByType`, `LabelNameToCodeByType`, and `ValidLabelCodesByType`
-- Relation and provenance enums: `RelationType*`, `RelationKind*`, `ImportRunStatus*`, and `CEFRSource*`
+- Relation and provenance enums: `RelationType*`, `HeadwordRelationPOS*`, `OEWNPartOfSpeechCode*`, `OEWNSenseType*`, `OEWNSourceRelation*`, `RelationKind*`, `ImportRunStatus*`, and `CEFRSource*`
 - Learning scales: `CEFRLevel*`, `OxfordLevel*`, `CETLevel*`, `SchoolLevel*`, and `CollinsStars*`, plus code/name maps
 
 `norm` exports the deterministic helpers and frozen lookup maps:

@@ -173,7 +173,7 @@ var postgresIntegrationExpectedTables = []string{
 	"pronunciation_ipas",
 	"pronunciation_audios",
 	"entry_forms",
-	"lexical_relations",
+	"headword_relation_edges",
 	"entry_summaries_zh",
 	"entry_learning_signals",
 	"entry_cefr_source_signals",
@@ -215,9 +215,10 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_normalized_form"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
 	{TableName: "entry_forms", IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
-	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_entry_id_relation_type"},
-	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_sense_id_relation_type"},
-	{TableName: "lexical_relations", IndexName: "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm"},
+	{TableName: "headword_relation_edges", IndexName: "idx_headword_relation_edges_source_headword_pos_type"},
+	{TableName: "headword_relation_edges", IndexName: "idx_headword_relation_edges_target_headword_pos"},
+	{TableName: "headword_relation_edges", IndexName: "idx_headword_relation_edges_unique_evidence"},
+	{TableName: "headword_relation_edges", IndexName: "idx_headword_relation_edges_import_run_id"},
 	{TableName: "entry_summaries_zh", IndexName: "idx_entry_summaries_zh_entry_id_source"},
 	{TableName: "entry_summaries_zh", IndexName: "idx_entry_summaries_zh_entry_id"},
 	{TableName: "entry_summaries_zh", IndexName: "idx_entry_summaries_zh_source_updated_at"},
@@ -289,13 +290,6 @@ var postgresIntegrationExpectedSQLManagedIndexDefinitions = []sqlIndexDefinition
 		Unique:    true,
 		Method:    "btree",
 		Columns:   []string{"entry_id", "relation_kind", "form_text", "COALESCE(form_type, '')"},
-	},
-	{
-		TableName: "lexical_relations",
-		IndexName: "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm",
-		Unique:    true,
-		Method:    "btree",
-		Columns:   []string{"entry_id", "COALESCE(sense_id, 0)", "relation_type", "target_text_normalized"},
 	},
 	{
 		TableName: "entry_search_terms",
@@ -508,16 +502,40 @@ var postgresIntegrationExpectedGORMIndexDefinitions = []sqlIndexDefinitionTarget
 		Columns:   []string{"normalized_form"},
 	},
 	{
-		TableName: "lexical_relations",
-		IndexName: "idx_lexical_relations_entry_id_relation_type",
+		TableName: "headword_relation_edges",
+		IndexName: "idx_headword_relation_edges_source_headword_pos_type",
 		Method:    "btree",
-		Columns:   []string{"entry_id", "relation_type"},
+		Columns:   []string{"source_headword_normalized", "source_pos_code", "relation_type"},
 	},
 	{
-		TableName: "lexical_relations",
-		IndexName: "idx_lexical_relations_sense_id_relation_type",
+		TableName: "headword_relation_edges",
+		IndexName: "idx_headword_relation_edges_target_headword_pos",
 		Method:    "btree",
-		Columns:   []string{"sense_id", "relation_type"},
+		Columns:   []string{"target_headword_normalized", "target_pos_code"},
+	},
+	{
+		TableName: "headword_relation_edges",
+		IndexName: "idx_headword_relation_edges_unique_evidence",
+		Unique:    true,
+		Method:    "btree",
+		Columns: []string{
+			"source_headword_normalized",
+			"source_pos_code",
+			"relation_type",
+			"source_relation_type",
+			"target_headword_normalized",
+			"target_pos_code",
+			"source_synset_id",
+			"target_synset_id",
+			"source_sense_id",
+			"target_sense_id",
+		},
+	},
+	{
+		TableName: "headword_relation_edges",
+		IndexName: "idx_headword_relation_edges_import_run_id",
+		Method:    "btree",
+		Columns:   []string{"import_run_id"},
 	},
 	{
 		TableName: "entry_summaries_zh",
@@ -880,11 +898,6 @@ func TestMatchesIndexDefinition_AcceptsPostgresDeparserStyleDefinitions(t *testi
 			name:            "reverse_form_partial_index_array_element_casts",
 			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_entry_forms_reverse_form_text_entry_id"),
 			indexDefinition: "CREATE INDEX idx_entry_forms_reverse_form_text_entry_id ON public.entry_forms USING btree (form_text, entry_id) WHERE ((source_relations && ARRAY['form_of'::text, 'alt_of'::text]))",
-		},
-		{
-			name:            "lexical_relations_coalesce_with_bigint_casts_and_wrapping_parens",
-			target:          mustIndexDefinitionTarget(t, postgresIntegrationExpectedSQLManagedIndexDefinitions, "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm"),
-			indexDefinition: "CREATE UNIQUE INDEX idx_lexical_relations_entry_id_sense_id_rel_type_target_norm ON public.lexical_relations USING btree (entry_id, (COALESCE((sense_id)::bigint, (0)::bigint)), relation_type, target_text_normalized)",
 		},
 	}
 
@@ -1388,7 +1401,7 @@ func TestIdentityColumnsSQL_UsesActiveSchema(t *testing.T) {
 	}
 }
 
-func TestCheckConstraintsSQL_RepairsSenseAndLexicalRelationTypeChecks(t *testing.T) {
+func TestCheckConstraintsSQL_RepairsSenseLabelChecks(t *testing.T) {
 	t.Parallel()
 
 	sqlText := mustReadEmbeddedSQL(t, "sql/006_check_constraints.sql")
@@ -1407,16 +1420,6 @@ func TestCheckConstraintsSQL_RepairsSenseAndLexicalRelationTypeChecks(t *testing
 		"current_schema()",
 		"DROP CONSTRAINT",
 		"chk_sense_labels_label_type",
-		"format('%I.%I', active_schema, 'lexical_relations')",
-		"chk_lexical_relations_relation_type",
-		"'related'",
-		"'hypernym'",
-		"'hyponym'",
-		"'coordinate_term'",
-		"'meronym'",
-		"'holonym'",
-		"'troponym'",
-		"'instance'",
 		"'variety'",
 	} {
 		if !strings.Contains(sqlText, fragment) {
@@ -2171,6 +2174,12 @@ func TestRunMigration_PostgresIntegration(t *testing.T) {
 		return
 	}
 
+	if !t.Run("headword relation edges enforce OEWN contracts", func(t *testing.T) {
+		runHeadwordRelationEdgeContractSubtest(t, db)
+	}) {
+		return
+	}
+
 	if !t.Run("schema contract surfaces extra current-schema objects", func(t *testing.T) {
 		runSchemaContractExtraObjectSubtest(t, db)
 	}) {
@@ -2221,6 +2230,8 @@ func runInitialMigrationContractSubtest(t *testing.T, db *gorm.DB) {
 	assertColumnTypes(t, db, []columnExpectation{
 		{TableName: "import_runs", ColumnName: "source_dump_date", DataType: "date", UDTName: "date"},
 		{TableName: "entries", ColumnName: "pos", DataType: "text", UDTName: "text"},
+		{TableName: "headword_relation_edges", ColumnName: "source_pos_code", DataType: "integer", UDTName: "int4"},
+		{TableName: "headword_relation_edges", ColumnName: "target_pos_code", DataType: "integer", UDTName: "int4"},
 		{TableName: "pronunciation_ipas", ColumnName: "accent_code", DataType: "text", UDTName: "text"},
 		{TableName: "pronunciation_audios", ColumnName: "accent_code", DataType: "text", UDTName: "text"},
 		{TableName: "entry_forms", ColumnName: "source_relations", DataType: "ARRAY", UDTName: "_text"},
@@ -2392,6 +2403,63 @@ func assertSenseCEFRLevelRejected(t *testing.T, db *gorm.DB, entryRunID, cefrRun
 		CEFRLevel:  cefrLevel,
 		CEFRRunID:  int64Ptr(cefrRunID),
 	})
+}
+
+func runHeadwordRelationEdgeContractSubtest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	startedAt := time.Now().UTC()
+	relationRunID := createImportRun(t, db, "headword-relation", "oewn", startedAt)
+	edge := model.HeadwordRelationEdge{
+		SourceHeadword:           "car",
+		SourceHeadwordNormalized: "car",
+		SourcePOSCode:            model.HeadwordRelationPOSCodeNoun,
+		RelationType:             model.RelationTypeMeronym,
+		TargetHeadword:           "wheel",
+		TargetHeadwordNormalized: "wheel",
+		TargetPOSCode:            model.HeadwordRelationPOSCodeNoun,
+		SourceRelationType:       model.OEWNSourceRelationMeroPart,
+		SourceSynsetID:           "02958343-n",
+		TargetSynsetID:           "04587648-n",
+		SourceSenseID:            "car%1:06:00::",
+		TargetSenseID:            "wheel%1:06:00::",
+		ImportRunID:              relationRunID,
+	}
+	createFixtureRecord(t, db, "headword_relation_edge", &edge)
+
+	assertModelRowCount(t, db, &model.HeadwordRelationEdge{}, 1, "source_headword_normalized = ? AND source_pos_code = ? AND relation_type = ?", "car", model.HeadwordRelationPOSCodeNoun, model.RelationTypeMeronym)
+	assertImportRunDeleteRestricted(t, db, relationRunID, "headword_relation")
+
+	duplicate := edge
+	duplicate.ID = 0
+	assertUniqueConstraintRejected(t, db, "headword_relation_edge_duplicate_evidence", &duplicate)
+
+	for _, invalid := range []struct {
+		name  string
+		patch func(*model.HeadwordRelationEdge)
+	}{
+		{name: "source_relation_type", patch: func(edge *model.HeadwordRelationEdge) { edge.SourceRelationType = "related" }},
+		{name: "relation_type", patch: func(edge *model.HeadwordRelationEdge) { edge.RelationType = "derived" }},
+		{name: "source_pos_code", patch: func(edge *model.HeadwordRelationEdge) { edge.SourcePOSCode = 0 }},
+		{name: "source_pos_code_unknown_positive", patch: func(edge *model.HeadwordRelationEdge) { edge.SourcePOSCode = 5 }},
+		{name: "target_pos_code", patch: func(edge *model.HeadwordRelationEdge) { edge.TargetPOSCode = 0 }},
+		{name: "target_pos_code_unknown_positive", patch: func(edge *model.HeadwordRelationEdge) { edge.TargetPOSCode = 5 }},
+		{name: "source_synset_id", patch: func(edge *model.HeadwordRelationEdge) { edge.SourceSynsetID = "" }},
+		{name: "target_synset_id", patch: func(edge *model.HeadwordRelationEdge) { edge.TargetSynsetID = "" }},
+	} {
+		candidate := edge
+		candidate.ID = 0
+		if invalid.name != "source_synset_id" {
+			candidate.SourceSynsetID += "-" + invalid.name
+		}
+		invalid.patch(&candidate)
+		assertCheckConstraintRejected(t, db, "headword_relation_edge_"+invalid.name, &candidate)
+	}
+
+	if err := db.Delete(&model.HeadwordRelationEdge{}, edge.ID).Error; err != nil {
+		t.Fatalf("Delete(headword_relation_edge) error = %v; want nil", err)
+	}
+	assertImportRunDeleteAllowed(t, db, relationRunID, "headword_relation")
 }
 
 func runSchemaContractExtraObjectSubtest(t *testing.T, db *gorm.DB) {
@@ -4629,6 +4697,20 @@ func assertCheckConstraintRejected[T any](t *testing.T, db *gorm.DB, label strin
 	}
 }
 
+func assertUniqueConstraintRejected[T any](t *testing.T, db *gorm.DB, label string, value *T) {
+	t.Helper()
+
+	err := db.Create(value).Error
+	if err == nil {
+		t.Fatalf("Create(%s) error = nil; want unique constraint rejection", label)
+	}
+
+	normalizedErr := strings.ToLower(err.Error())
+	if !strings.Contains(normalizedErr, "duplicate key") && !strings.Contains(normalizedErr, "sqlstate 23505") {
+		t.Fatalf("Create(%s) error = %v; want unique constraint rejection", label, err)
+	}
+}
+
 func seedMigrationFixture(t *testing.T, db *gorm.DB, suffix string) migrationFixture {
 	t.Helper()
 
@@ -4640,7 +4722,7 @@ func seedMigrationFixture(t *testing.T, db *gorm.DB, suffix string) migrationFix
 	seedMigrationFixtureGlosses(t, db, suffix, sense.ID, importRunIDs[importRunKeySenseGlossZH])
 	seedMigrationFixtureSenseMetadata(t, db, suffix, sense.ID)
 	seedMigrationFixturePronunciations(t, db, suffix, entry.ID)
-	form := seedMigrationFixtureFormAndRelations(t, db, suffix, entry.ID, sense.ID)
+	form := seedMigrationFixtureForm(t, db, suffix, entry.ID)
 	seedMigrationFixtureSummaryAndSignals(t, db, suffix, entry.ID, sense.ID, importRunIDs)
 
 	return migrationFixture{
@@ -4752,7 +4834,7 @@ func seedMigrationFixturePronunciations(t *testing.T, db *gorm.DB, suffix string
 	createFixtureRecord(t, db, "pronunciation_audio", &pronunciationAudio)
 }
 
-func seedMigrationFixtureFormAndRelations(t *testing.T, db *gorm.DB, suffix string, entryID, senseID int64) model.EntryForm {
+func seedMigrationFixtureForm(t *testing.T, db *gorm.DB, suffix string, entryID int64) model.EntryForm {
 	t.Helper()
 
 	formType := "plural"
@@ -4765,25 +4847,6 @@ func seedMigrationFixtureFormAndRelations(t *testing.T, db *gorm.DB, suffix stri
 		SourceRelations: pq.StringArray{"wiktionary", "plural"},
 	}
 	createFixtureRecord(t, db, "entry_form", &form)
-
-	entryRelation := model.LexicalRelation{
-		EntryID:              entryID,
-		RelationType:         model.RelationTypeDerived,
-		TargetText:           "derived-" + suffix,
-		TargetTextNormalized: "derived" + suffix,
-		DisplayOrder:         1,
-	}
-	createFixtureRecord(t, db, "entry lexical_relation", &entryRelation)
-
-	senseRelation := model.LexicalRelation{
-		EntryID:              entryID,
-		SenseID:              int64Ptr(senseID),
-		RelationType:         model.RelationTypeSynonym,
-		TargetText:           "synonym-" + suffix,
-		TargetTextNormalized: "synonym" + suffix,
-		DisplayOrder:         1,
-	}
-	createFixtureRecord(t, db, "sense lexical_relation", &senseRelation)
 
 	return form
 }
@@ -4945,7 +5008,6 @@ func assertEntryOwnedCascadeRows(t *testing.T, db *gorm.DB, fixture migrationFix
 	assertModelRowCount(t, db, &model.PronunciationIPA{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.PronunciationAudio{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryForm{}, want, "entry_id = ?", fixture.EntryID)
-	assertModelRowCount(t, db, &model.LexicalRelation{}, want, "entry_id = ? AND sense_id IS NULL", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntrySummaryZH{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryLearningSignal{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, want, "entry_id = ?", fixture.EntryID)
@@ -4959,7 +5021,6 @@ func assertSenseOwnedCascadeRows(t *testing.T, db *gorm.DB, fixture migrationFix
 	assertModelRowCount(t, db, &model.SenseGlossZH{}, want, "sense_id = ?", fixture.SenseID)
 	assertModelRowCount(t, db, &model.SenseLabel{}, want, "sense_id = ?", fixture.SenseID)
 	assertModelRowCount(t, db, &model.SenseExample{}, want, "sense_id = ?", fixture.SenseID)
-	assertModelRowCount(t, db, &model.LexicalRelation{}, want, "sense_id = ?", fixture.SenseID)
 	assertModelRowCount(t, db, &model.SenseLearningSignal{}, want, "sense_id = ?", fixture.SenseID)
 	assertModelRowCount(t, db, &model.SenseCEFRSourceSignal{}, want, "sense_id = ?", fixture.SenseID)
 }

@@ -26,7 +26,7 @@ var postgresRealDataCanonicalTables = []string{
 	"pronunciation_ipas",
 	"pronunciation_audios",
 	"entry_forms",
-	"lexical_relations",
+	"headword_relation_edges",
 	"entry_summaries_zh",
 	"entry_learning_signals",
 	"entry_cefr_source_signals",

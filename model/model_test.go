@@ -46,8 +46,7 @@ func TestIdentityReferencedForeignKeysExplicitlyDisableAutoIncrement(t *testing.
 		{name: "pronunciation_ipa_entry_id", model: PronunciationIPA{}, fieldName: "EntryID"},
 		{name: "pronunciation_audio_entry_id", model: PronunciationAudio{}, fieldName: "EntryID"},
 		{name: "entry_form_entry_id", model: EntryForm{}, fieldName: "EntryID"},
-		{name: "lexical_relation_entry_id", model: LexicalRelation{}, fieldName: "EntryID"},
-		{name: "lexical_relation_sense_id", model: LexicalRelation{}, fieldName: "SenseID"},
+		{name: "headword_relation_edge_import_run_id", model: HeadwordRelationEdge{}, fieldName: "ImportRunID"},
 		{name: "entry_search_term_entry_id", model: EntrySearchTerm{}, fieldName: "EntryID"},
 		{name: "entry_learning_signal_cefr_run_id", model: EntryLearningSignal{}, fieldName: "CEFRRunID"},
 		{name: "entry_learning_signal_oxford_run_id", model: EntryLearningSignal{}, fieldName: "OxfordRunID"},
@@ -122,31 +121,50 @@ func TestStep34GORMTagContracts(t *testing.T) {
 	}
 }
 
-func TestLexicalRelationRelationTypeGORMCheckAllowsControlledRelationTypes(t *testing.T) {
+func TestHeadwordRelationEdgeGORMContracts(t *testing.T) {
 	t.Parallel()
 
-	field := mustStructField(t, LexicalRelation{}, "RelationType")
-	tag := field.Tag.Get("gorm")
+	if got := (HeadwordRelationEdge{}).TableName(); got != "headword_relation_edges" {
+		t.Fatalf("HeadwordRelationEdge.TableName() = %q; want %q", got, "headword_relation_edges")
+	}
 
+	relationTypeTag := mustStructField(t, HeadwordRelationEdge{}, "RelationType").Tag.Get("gorm")
 	for _, fragment := range []string{
-		"index:idx_lexical_relations_entry_id_relation_type,priority:2",
-		"index:idx_lexical_relations_sense_id_relation_type,priority:2",
+		"index:idx_headword_relation_edges_source_headword_pos_type,priority:3",
+		"uniqueIndex:idx_headword_relation_edges_unique_evidence,priority:3",
 	} {
-		if !strings.Contains(tag, fragment) {
-			t.Fatalf("LexicalRelation.RelationType gorm tag = %q; want fragment %q", tag, fragment)
+		if !strings.Contains(relationTypeTag, fragment) {
+			t.Fatalf("HeadwordRelationEdge.RelationType gorm tag = %q; want fragment %q", relationTypeTag, fragment)
+		}
+	}
+
+	for _, tt := range []gormTagExpectation{
+		{name: "source_headword_query_index", model: HeadwordRelationEdge{}, fieldName: "SourceHeadwordNormalized", wantFragment: "idx_headword_relation_edges_source_headword_pos_type,priority:1"},
+		{name: "target_headword_query_index", model: HeadwordRelationEdge{}, fieldName: "TargetHeadwordNormalized", wantFragment: "idx_headword_relation_edges_target_headword_pos,priority:1"},
+		{name: "source_relation_type_check", model: HeadwordRelationEdge{}, fieldName: "SourceRelationType", wantFragment: "check:source_relation_type IN ('members','antonym','derivation','pertainym','hypernym','mero_part','mero_member','mero_substance','similar','also','domain_topic','domain_region','exemplifies','attribute','entails','causes','event','agent','result','by_means_of','undergoer','instrument','uses','state','property','location','material','vehicle','participle','body_part','destination')"},
+		{name: "source_pos_check", model: HeadwordRelationEdge{}, fieldName: "SourcePOSCode", wantFragment: "check:source_pos_code IN (1,2,3,4)"},
+		{name: "target_pos_check", model: HeadwordRelationEdge{}, fieldName: "TargetPOSCode", wantFragment: "check:target_pos_code IN (1,2,3,4)"},
+		{name: "source_synset_check", model: HeadwordRelationEdge{}, fieldName: "SourceSynsetID", wantFragment: "check:source_synset_id <> ''"},
+		{name: "target_synset_check", model: HeadwordRelationEdge{}, fieldName: "TargetSynsetID", wantFragment: "check:target_synset_id <> ''"},
+		{name: "import_run_fk", model: HeadwordRelationEdge{}, fieldName: "ImportRunID", wantFragment: "autoIncrement:false;not null;index:idx_headword_relation_edges_import_run_id"},
+	} {
+		field := mustStructField(t, tt.model, tt.fieldName)
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, tt.wantFragment) {
+			t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
 		}
 	}
 
 	const checkPrefix = "check:relation_type IN ("
-	start := strings.Index(tag, checkPrefix)
+	start := strings.Index(relationTypeTag, checkPrefix)
 	if start < 0 {
-		t.Fatalf("LexicalRelation.RelationType gorm tag = %q; want relation_type check", tag)
+		t.Fatalf("HeadwordRelationEdge.RelationType gorm tag = %q; want relation_type check", relationTypeTag)
 	}
 
-	checkValues := tag[start+len(checkPrefix):]
+	checkValues := relationTypeTag[start+len(checkPrefix):]
 	end := strings.Index(checkValues, ")")
 	if end < 0 {
-		t.Fatalf("LexicalRelation.RelationType gorm tag = %q; want closed relation_type check", tag)
+		t.Fatalf("HeadwordRelationEdge.RelationType gorm tag = %q; want closed relation_type check", relationTypeTag)
 	}
 
 	got := make(map[string]struct{})
@@ -157,11 +175,11 @@ func TestLexicalRelationRelationTypeGORMCheckAllowsControlledRelationTypes(t *te
 
 	want := RelationTypeCodeToName()
 	if len(got) != len(want) {
-		t.Fatalf("LexicalRelation.RelationType check values = %v; want %d controlled relation types", got, len(want))
+		t.Fatalf("HeadwordRelationEdge.RelationType check values = %v; want %d controlled relation types", got, len(want))
 	}
 	for code := range want {
 		if _, ok := got[code]; !ok {
-			t.Fatalf("LexicalRelation.RelationType check values = %v; missing controlled relation type %q", got, code)
+			t.Fatalf("HeadwordRelationEdge.RelationType check values = %v; missing controlled relation type %q", got, code)
 		}
 	}
 }

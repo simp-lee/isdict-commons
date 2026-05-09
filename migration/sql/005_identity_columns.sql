@@ -22,7 +22,7 @@ BEGIN
 		'pronunciation_ipas',
 		'pronunciation_audios',
 		'entry_forms',
-		'lexical_relations',
+		'headword_relation_edges',
 		'entry_summaries_zh',
 		'entry_search_terms'
 	] LOOP

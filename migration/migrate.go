@@ -60,7 +60,7 @@ var migrationTargets = []migrationTarget{
 	{TableName: "pronunciation_ipas", Model: &model.PronunciationIPA{}},
 	{TableName: "pronunciation_audios", Model: &model.PronunciationAudio{}},
 	{TableName: "entry_forms", Model: &model.EntryForm{}},
-	{TableName: "lexical_relations", Model: &model.LexicalRelation{}},
+	{TableName: "headword_relation_edges", Model: &model.HeadwordRelationEdge{}},
 	{TableName: "entry_summaries_zh", Model: &model.EntrySummaryZH{}},
 	{TableName: "entry_learning_signals", Model: &model.EntryLearningSignal{}},
 	{TableName: "entry_cefr_source_signals", Model: &model.EntryCEFRSourceSignal{}},
@@ -82,7 +82,7 @@ var identityManagedTables = []string{
 	"pronunciation_ipas",
 	"pronunciation_audios",
 	"entry_forms",
-	"lexical_relations",
+	"headword_relation_edges",
 	"entry_summaries_zh",
 	"entry_search_terms",
 }
@@ -96,7 +96,7 @@ var dropTargets = []any{
 	&model.EntryCEFRSourceSignal{},
 	&model.EntryLearningSignal{},
 	&model.EntrySummaryZH{},
-	&model.LexicalRelation{},
+	&model.HeadwordRelationEdge{},
 	&model.EntryForm{},
 	&model.PronunciationAudio{},
 	&model.PronunciationIPA{},
@@ -140,9 +140,10 @@ var expectedIndexes = []indexTarget{
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_normalized_form"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_entry_id_relation_kind_form_text_form_type"},
 	{TableName: "entry_forms", Model: &model.EntryForm{}, IndexName: "idx_entry_forms_reverse_form_text_entry_id"},
-	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_entry_id_relation_type"},
-	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_sense_id_relation_type"},
-	{TableName: "lexical_relations", Model: &model.LexicalRelation{}, IndexName: "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm"},
+	{TableName: "headword_relation_edges", Model: &model.HeadwordRelationEdge{}, IndexName: "idx_headword_relation_edges_source_headword_pos_type"},
+	{TableName: "headword_relation_edges", Model: &model.HeadwordRelationEdge{}, IndexName: "idx_headword_relation_edges_target_headword_pos"},
+	{TableName: "headword_relation_edges", Model: &model.HeadwordRelationEdge{}, IndexName: "idx_headword_relation_edges_unique_evidence"},
+	{TableName: "headword_relation_edges", Model: &model.HeadwordRelationEdge{}, IndexName: "idx_headword_relation_edges_import_run_id"},
 	{TableName: "entry_summaries_zh", Model: &model.EntrySummaryZH{}, IndexName: "idx_entry_summaries_zh_entry_id_source"},
 	{TableName: "entry_summaries_zh", Model: &model.EntrySummaryZH{}, IndexName: "idx_entry_summaries_zh_entry_id"},
 	{TableName: "entry_summaries_zh", Model: &model.EntrySummaryZH{}, IndexName: "idx_entry_summaries_zh_source_updated_at"},
@@ -220,13 +221,6 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 		Columns:   []string{"entry_id", "relation_kind", "form_text", "COALESCE(form_type, '')"},
 	},
 	{
-		TableName: "lexical_relations",
-		IndexName: "idx_lexical_relations_entry_id_sense_id_rel_type_target_norm",
-		Unique:    true,
-		Method:    "btree",
-		Columns:   []string{"entry_id", "COALESCE(sense_id, 0)", "relation_type", "target_text_normalized"},
-	},
-	{
 		TableName: "entry_search_terms",
 		IndexName: "idx_entry_search_terms_frequency_rank_active",
 		Method:    "btree",
@@ -276,7 +270,7 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 	},
 }
 
-const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, pronunciation_ipas, pronunciation_audios, entry_forms, lexical_relations, entry_summaries_zh, entry_learning_signals, entry_cefr_source_signals, sense_learning_signals, sense_cefr_source_signals, entry_etymologies, entry_search_terms, featured_candidates`
+const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, pronunciation_ipas, pronunciation_audios, entry_forms, headword_relation_edges, entry_summaries_zh, entry_learning_signals, entry_cefr_source_signals, sense_learning_signals, sense_cefr_source_signals, entry_etymologies, entry_search_terms, featured_candidates`
 
 // MigrateOptions controls schema reset and verbose progress logging for RunMigration.
 // ANALYZE is intentionally best-effort and always attempted; failures are warned about,
