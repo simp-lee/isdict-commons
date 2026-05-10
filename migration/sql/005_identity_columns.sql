@@ -19,6 +19,8 @@ BEGIN
 		'sense_glosses_zh',
 		'sense_labels',
 		'sense_examples',
+		'entry_definitions',
+		'entry_examples',
 		'pronunciation_ipas',
 		'pronunciation_audios',
 		'entry_forms',

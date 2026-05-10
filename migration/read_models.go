@@ -119,6 +119,7 @@ INSERT INTO featured_candidates (
 	oxford_level,
 	cet_level,
 	collins_stars,
+	school_level,
 	quality_rank
 )
 SELECT
@@ -132,12 +133,14 @@ SELECT
 	ls.oxford_level,
 	ls.cet_level,
 	ls.collins_stars,
+	ls.school_level,
 	CASE WHEN ls.frequency_rank > 0 THEN ls.frequency_rank ELSE 999999 END
 FROM entries e
 JOIN entry_learning_signals ls ON ls.entry_id = e.id
-WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0
+WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
 ORDER BY
 	CASE WHEN ls.frequency_rank > 0 THEN ls.frequency_rank ELSE 999999 END,
 	ls.cefr_level DESC,
 	ls.collins_stars DESC,
+	ls.school_level ASC,
 	e.id`

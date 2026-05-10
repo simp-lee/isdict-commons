@@ -43,6 +43,12 @@ func TestIdentityReferencedForeignKeysExplicitlyDisableAutoIncrement(t *testing.
 		{name: "sense_gloss_zh_source_run_id", model: SenseGlossZH{}, fieldName: "SourceRunID"},
 		{name: "sense_label_sense_id", model: SenseLabel{}, fieldName: "SenseID"},
 		{name: "sense_example_sense_id", model: SenseExample{}, fieldName: "SenseID"},
+		{name: "entry_definition_entry_id", model: EntryDefinition{}, fieldName: "EntryID"},
+		{name: "entry_definition_sense_id", model: EntryDefinition{}, fieldName: "SenseID"},
+		{name: "entry_definition_source_run_id", model: EntryDefinition{}, fieldName: "SourceRunID"},
+		{name: "entry_example_entry_id", model: EntryExample{}, fieldName: "EntryID"},
+		{name: "entry_example_sense_id", model: EntryExample{}, fieldName: "SenseID"},
+		{name: "entry_example_source_run_id", model: EntryExample{}, fieldName: "SourceRunID"},
 		{name: "pronunciation_ipa_entry_id", model: PronunciationIPA{}, fieldName: "EntryID"},
 		{name: "pronunciation_audio_entry_id", model: PronunciationAudio{}, fieldName: "EntryID"},
 		{name: "entry_form_entry_id", model: EntryForm{}, fieldName: "EntryID"},
@@ -51,6 +57,7 @@ func TestIdentityReferencedForeignKeysExplicitlyDisableAutoIncrement(t *testing.
 		{name: "entry_learning_signal_cefr_run_id", model: EntryLearningSignal{}, fieldName: "CEFRRunID"},
 		{name: "entry_learning_signal_oxford_run_id", model: EntryLearningSignal{}, fieldName: "OxfordRunID"},
 		{name: "entry_learning_signal_cet_run_id", model: EntryLearningSignal{}, fieldName: "CETRunID"},
+		{name: "entry_learning_signal_school_run_id", model: EntryLearningSignal{}, fieldName: "SchoolRunID"},
 		{name: "entry_learning_signal_frequency_run_id", model: EntryLearningSignal{}, fieldName: "FrequencyRunID"},
 		{name: "entry_learning_signal_collins_run_id", model: EntryLearningSignal{}, fieldName: "CollinsRunID"},
 		{name: "entry_cefr_source_signal_cefr_run_id", model: EntryCEFRSourceSignal{}, fieldName: "CEFRRunID"},
@@ -264,6 +271,138 @@ func TestSenseGlossZHChineseDisplayTextUniqueIndexContract(t *testing.T) {
 	}
 }
 
+func TestEntryDefinitionSchemaContract(t *testing.T) {
+	t.Parallel()
+
+	if got := (EntryDefinition{}).TableName(); got != "entry_definitions" {
+		t.Fatalf("EntryDefinition.TableName() = %q; want %q", got, "entry_definitions")
+	}
+
+	parsedSchema := mustParseModelSchema(t, EntryDefinition{})
+	for _, fieldName := range []string{
+		"ID",
+		"EntryID",
+		"SenseID",
+		"POS",
+		"Source",
+		"SourceRunID",
+		"DefinitionOrder",
+		"TextZHHans",
+		"TextEN",
+		"NormalizedZHHansKey",
+		"NormalizedENKey",
+		"UpdatedAt",
+	} {
+		if parsedSchema.LookUpField(fieldName) == nil {
+			t.Fatalf("EntryDefinition schema field %s not found", fieldName)
+		}
+	}
+
+	assertNullableInt64ForeignKeyField(t, EntryDefinition{}, "SenseID")
+	requireBelongsToRelationship(t, EntryDefinition{}, parsedSchema, "Entry", Entry{})
+	requireBelongsToRelationship(t, EntryDefinition{}, parsedSchema, "Sense", Sense{})
+	requireBelongsToRelationship(t, EntryDefinition{}, parsedSchema, "SourceRun", ImportRun{})
+
+	for _, tt := range []gormTagExpectation{
+		{name: "entry_id_index", model: EntryDefinition{}, fieldName: "EntryID", wantFragment: "index:idx_entry_definitions_entry_id"},
+		{name: "entry_id_order_index", model: EntryDefinition{}, fieldName: "EntryID", wantFragment: "index:idx_entry_definitions_entry_id_definition_order,priority:1"},
+		{name: "entry_id_unique_zh", model: EntryDefinition{}, fieldName: "EntryID", wantFragment: "uniqueIndex:idx_entry_definitions_entry_id_pos_normalized_zh_hans_key,priority:1"},
+		{name: "sense_id_nullable_index", model: EntryDefinition{}, fieldName: "SenseID", wantFragment: "index:idx_entry_definitions_sense_id"},
+		{name: "pos_unique_zh", model: EntryDefinition{}, fieldName: "POS", wantFragment: "uniqueIndex:idx_entry_definitions_entry_id_pos_normalized_zh_hans_key,priority:2"},
+		{name: "source_updated_index", model: EntryDefinition{}, fieldName: "Source", wantFragment: "index:idx_entry_definitions_source_updated_at,priority:1"},
+		{name: "source_run_fk", model: EntryDefinition{}, fieldName: "SourceRunID", wantFragment: "autoIncrement:false;not null;index:idx_entry_definitions_source_run_id"},
+		{name: "definition_order_check", model: EntryDefinition{}, fieldName: "DefinitionOrder", wantFragment: "check:definition_order >= 1"},
+		{name: "definition_order_index", model: EntryDefinition{}, fieldName: "DefinitionOrder", wantFragment: "index:idx_entry_definitions_entry_id_definition_order,priority:2"},
+		{name: "zh_text_check", model: EntryDefinition{}, fieldName: "TextZHHans", wantFragment: "check:text_zh_hans <> ''"},
+		{name: "zh_key_check", model: EntryDefinition{}, fieldName: "NormalizedZHHansKey", wantFragment: "check:normalized_zh_hans_key <> ''"},
+		{name: "zh_key_unique", model: EntryDefinition{}, fieldName: "NormalizedZHHansKey", wantFragment: "uniqueIndex:idx_entry_definitions_entry_id_pos_normalized_zh_hans_key,priority:3"},
+		{name: "updated_desc_index", model: EntryDefinition{}, fieldName: "UpdatedAt", wantFragment: "index:idx_entry_definitions_source_updated_at,priority:2,sort:desc"},
+	} {
+		field := mustStructField(t, tt.model, tt.fieldName)
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, tt.wantFragment) {
+			t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
+		}
+	}
+
+	for _, tt := range []gormTagExpectation{
+		{name: "entry_cascade", model: EntryDefinition{}, fieldName: "Entry", wantFragment: "constraint:OnDelete:CASCADE"},
+		{name: "sense_set_null", model: EntryDefinition{}, fieldName: "Sense", wantFragment: "constraint:OnDelete:SET NULL"},
+		{name: "source_run_restrict", model: EntryDefinition{}, fieldName: "SourceRun", wantFragment: "constraint:OnDelete:RESTRICT"},
+	} {
+		field := mustStructField(t, tt.model, tt.fieldName)
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, tt.wantFragment) {
+			t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
+		}
+	}
+}
+
+func TestEntryExampleSchemaContract(t *testing.T) {
+	t.Parallel()
+
+	if got := (EntryExample{}).TableName(); got != "entry_examples" {
+		t.Fatalf("EntryExample.TableName() = %q; want %q", got, "entry_examples")
+	}
+
+	parsedSchema := mustParseModelSchema(t, EntryExample{})
+	for _, fieldName := range []string{
+		"ID",
+		"EntryID",
+		"SenseID",
+		"Source",
+		"SourceRunID",
+		"ExampleOrder",
+		"SentenceEN",
+		"SentenceZHHans",
+		"NormalizedSentenceENKey",
+		"NormalizedSentenceZHKey",
+		"UpdatedAt",
+	} {
+		if parsedSchema.LookUpField(fieldName) == nil {
+			t.Fatalf("EntryExample schema field %s not found", fieldName)
+		}
+	}
+
+	assertNullableInt64ForeignKeyField(t, EntryExample{}, "SenseID")
+	requireBelongsToRelationship(t, EntryExample{}, parsedSchema, "Entry", Entry{})
+	requireBelongsToRelationship(t, EntryExample{}, parsedSchema, "Sense", Sense{})
+	requireBelongsToRelationship(t, EntryExample{}, parsedSchema, "SourceRun", ImportRun{})
+
+	for _, tt := range []gormTagExpectation{
+		{name: "entry_id_index", model: EntryExample{}, fieldName: "EntryID", wantFragment: "index:idx_entry_examples_entry_id"},
+		{name: "entry_id_order_index", model: EntryExample{}, fieldName: "EntryID", wantFragment: "index:idx_entry_examples_entry_id_example_order,priority:1"},
+		{name: "entry_id_unique_en", model: EntryExample{}, fieldName: "EntryID", wantFragment: "uniqueIndex:idx_entry_examples_entry_id_normalized_sentence_en_key,priority:1"},
+		{name: "sense_id_nullable_index", model: EntryExample{}, fieldName: "SenseID", wantFragment: "index:idx_entry_examples_sense_id"},
+		{name: "source_updated_index", model: EntryExample{}, fieldName: "Source", wantFragment: "index:idx_entry_examples_source_updated_at,priority:1"},
+		{name: "source_run_fk", model: EntryExample{}, fieldName: "SourceRunID", wantFragment: "autoIncrement:false;not null;index:idx_entry_examples_source_run_id"},
+		{name: "example_order_check", model: EntryExample{}, fieldName: "ExampleOrder", wantFragment: "check:example_order >= 1"},
+		{name: "example_order_index", model: EntryExample{}, fieldName: "ExampleOrder", wantFragment: "index:idx_entry_examples_entry_id_example_order,priority:2"},
+		{name: "sentence_en_check", model: EntryExample{}, fieldName: "SentenceEN", wantFragment: "check:sentence_en <> ''"},
+		{name: "sentence_en_key_check", model: EntryExample{}, fieldName: "NormalizedSentenceENKey", wantFragment: "check:normalized_sentence_en_key <> ''"},
+		{name: "sentence_en_key_unique", model: EntryExample{}, fieldName: "NormalizedSentenceENKey", wantFragment: "uniqueIndex:idx_entry_examples_entry_id_normalized_sentence_en_key,priority:2"},
+		{name: "updated_desc_index", model: EntryExample{}, fieldName: "UpdatedAt", wantFragment: "index:idx_entry_examples_source_updated_at,priority:2,sort:desc"},
+	} {
+		field := mustStructField(t, tt.model, tt.fieldName)
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, tt.wantFragment) {
+			t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
+		}
+	}
+
+	for _, tt := range []gormTagExpectation{
+		{name: "entry_cascade", model: EntryExample{}, fieldName: "Entry", wantFragment: "constraint:OnDelete:CASCADE"},
+		{name: "sense_set_null", model: EntryExample{}, fieldName: "Sense", wantFragment: "constraint:OnDelete:SET NULL"},
+		{name: "source_run_restrict", model: EntryExample{}, fieldName: "SourceRun", wantFragment: "constraint:OnDelete:RESTRICT"},
+	} {
+		field := mustStructField(t, tt.model, tt.fieldName)
+		tag := field.Tag.Get("gorm")
+		if !strings.Contains(tag, tt.wantFragment) {
+			t.Fatalf("%T.%s gorm tag = %q; want fragment %q", tt.model, tt.fieldName, tag, tt.wantFragment)
+		}
+	}
+}
+
 func TestForeignKeysAsPrimaryKeysRemainOneToOneContracts(t *testing.T) {
 	t.Parallel()
 
@@ -390,6 +529,9 @@ func TestEntrySearchTermSchemaContract(t *testing.T) {
 			t.Fatalf("EntrySearchTerm schema field %s not found", fieldName)
 		}
 	}
+	if parsedSchema.LookUpField("SchoolRunID") != nil {
+		t.Fatal("EntrySearchTerm must not expose SchoolRunID; read models do not expose internal provenance")
+	}
 
 	termKindTag := mustStructField(t, EntrySearchTerm{}, "TermKind").Tag.Get("gorm")
 	if !strings.Contains(termKindTag, "check:term_kind IN ('headword','form','alias')") {
@@ -413,11 +555,15 @@ func TestFeaturedCandidateSchemaContract(t *testing.T) {
 		"OxfordLevel",
 		"CETLevel",
 		"CollinsStars",
+		"SchoolLevel",
 		"QualityRank",
 	} {
 		if parsedSchema.LookUpField(fieldName) == nil {
 			t.Fatalf("FeaturedCandidate schema field %s not found", fieldName)
 		}
+	}
+	if parsedSchema.LookUpField("SchoolRunID") != nil {
+		t.Fatal("FeaturedCandidate must not expose SchoolRunID; read models do not expose internal provenance")
 	}
 }
 
@@ -528,6 +674,30 @@ func TestLearningSignalGORMChecksAllowUnsetOrRealCEFRSources(t *testing.T) {
 	}
 }
 
+func TestEntryLearningSignalSchoolRunIDContract(t *testing.T) {
+	t.Parallel()
+
+	field := mustStructField(t, EntryLearningSignal{}, "SchoolRunID")
+	if field.Type.Kind() != reflect.Ptr || field.Type.Elem().Kind() != reflect.Int64 {
+		t.Fatalf("EntryLearningSignal.SchoolRunID type = %s; want *int64", field.Type)
+	}
+
+	parsedSchema := mustParseModelSchema(t, EntryLearningSignal{})
+	parsedField := parsedSchema.LookUpField("SchoolRunID")
+	if parsedField == nil {
+		t.Fatal("schema field EntryLearningSignal.SchoolRunID not found")
+	}
+	if parsedField.DBName != "school_run_id" {
+		t.Fatalf("schema field EntryLearningSignal.SchoolRunID DBName = %q; want %q", parsedField.DBName, "school_run_id")
+	}
+
+	requireBelongsToRelationship(t, EntryLearningSignal{}, parsedSchema, "SchoolRun", ImportRun{})
+	relationshipTag := mustStructField(t, EntryLearningSignal{}, "SchoolRun").Tag.Get("gorm")
+	if !strings.Contains(relationshipTag, "constraint:OnDelete:RESTRICT") {
+		t.Fatalf("EntryLearningSignal.SchoolRun gorm tag = %q; want RESTRICT foreign key", relationshipTag)
+	}
+}
+
 func TestCEFRSourceSignalRunIDColumnContracts(t *testing.T) {
 	t.Parallel()
 
@@ -582,6 +752,27 @@ func assertOneToOnePrimaryKeyTagContract(t *testing.T, model any, fieldName stri
 		if !strings.Contains(tag, wantFragment) {
 			t.Fatalf("%T.%s gorm tag = %q; want fragment %q", model, fieldName, tag, wantFragment)
 		}
+	}
+}
+
+func assertNullableInt64ForeignKeyField(t *testing.T, model any, fieldName string) {
+	t.Helper()
+
+	field := mustStructField(t, model, fieldName)
+	if field.Type.Kind() != reflect.Ptr || field.Type.Elem().Kind() != reflect.Int64 {
+		t.Fatalf("%T.%s type = %s; want *int64", model, fieldName, field.Type)
+	}
+	tag := field.Tag.Get("gorm")
+	if strings.Contains(tag, "not null") {
+		t.Fatalf("%T.%s gorm tag = %q; want nullable foreign key", model, fieldName, tag)
+	}
+
+	parsedField := mustParseModelSchema(t, model).LookUpField(fieldName)
+	if parsedField == nil {
+		t.Fatalf("schema field %T.%s not found", model, fieldName)
+	}
+	if parsedField.DBName == "" {
+		t.Fatalf("schema field %T.%s DBName empty; want concrete database column", model, fieldName)
 	}
 }
 

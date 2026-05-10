@@ -97,6 +97,9 @@ const (
 	importRunKeySenseLearningCEFR      = "sense_learning_cefr"
 	importRunKeySenseCEFRSource        = "sense_cefr_source"
 	importRunKeySenseLearningOxford    = "sense_learning_oxford"
+	importRunKeyEntryLearningSchool    = "entry_learning_school"
+	importRunKeyEntryDefinition        = "entry_definition"
+	importRunKeyEntryExample           = "entry_example"
 )
 
 var postgresIntegrationAllImportRunKeys = []string{
@@ -113,6 +116,9 @@ var postgresIntegrationAllImportRunKeys = []string{
 	importRunKeySenseLearningCEFR,
 	importRunKeySenseCEFRSource,
 	importRunKeySenseLearningOxford,
+	importRunKeyEntryLearningSchool,
+	importRunKeyEntryDefinition,
+	importRunKeyEntryExample,
 }
 
 var postgresIntegrationEntryOwnedImportRunKeys = []string{
@@ -125,6 +131,9 @@ var postgresIntegrationEntryOwnedImportRunKeys = []string{
 	importRunKeyEntryLearningCET,
 	importRunKeyEntryLearningFrequency,
 	importRunKeyEntryLearningCollins,
+	importRunKeyEntryLearningSchool,
+	importRunKeyEntryDefinition,
+	importRunKeyEntryExample,
 }
 
 var postgresIntegrationSenseOwnedImportRunKeys = []string{
@@ -139,6 +148,13 @@ type columnExpectation struct {
 	ColumnName string
 	DataType   string
 	UDTName    string
+}
+
+type foreignKeyDeleteRuleExpectation struct {
+	TableName           string
+	ColumnName          string
+	ReferencedTableName string
+	WantDeleteRule      string
 }
 
 type columnMetadata struct {
@@ -161,7 +177,7 @@ type indexExpectation struct {
 	IndexName string
 }
 
-// These test-side contracts intentionally duplicate the accepted 19-table schema.
+// These test-side contracts intentionally duplicate the accepted 21-table schema.
 var postgresIntegrationExpectedTables = []string{
 	"import_runs",
 	"entries",
@@ -170,6 +186,8 @@ var postgresIntegrationExpectedTables = []string{
 	"sense_glosses_zh",
 	"sense_labels",
 	"sense_examples",
+	"entry_definitions",
+	"entry_examples",
 	"pronunciation_ipas",
 	"pronunciation_audios",
 	"entry_forms",
@@ -204,6 +222,18 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "sense_labels", IndexName: "idx_sense_labels_label_type_label_code"},
 	{TableName: "sense_examples", IndexName: "idx_sense_examples_sense_id_source_example_order"},
 	{TableName: "sense_examples", IndexName: "idx_sense_examples_sense_id_example_order"},
+	{TableName: "entry_definitions", IndexName: "idx_entry_definitions_entry_id"},
+	{TableName: "entry_definitions", IndexName: "idx_entry_definitions_sense_id"},
+	{TableName: "entry_definitions", IndexName: "idx_entry_definitions_source_run_id"},
+	{TableName: "entry_definitions", IndexName: "idx_entry_definitions_source_updated_at"},
+	{TableName: "entry_definitions", IndexName: "idx_entry_definitions_entry_id_definition_order"},
+	{TableName: "entry_definitions", IndexName: "idx_entry_definitions_entry_id_pos_normalized_zh_hans_key"},
+	{TableName: "entry_examples", IndexName: "idx_entry_examples_entry_id"},
+	{TableName: "entry_examples", IndexName: "idx_entry_examples_sense_id"},
+	{TableName: "entry_examples", IndexName: "idx_entry_examples_source_run_id"},
+	{TableName: "entry_examples", IndexName: "idx_entry_examples_source_updated_at"},
+	{TableName: "entry_examples", IndexName: "idx_entry_examples_entry_id_example_order"},
+	{TableName: "entry_examples", IndexName: "idx_entry_examples_entry_id_normalized_sentence_en_key"},
 	{TableName: "pronunciation_ipas", IndexName: "idx_pronunciation_ipas_entry_id_accent_code_ipa"},
 	{TableName: "pronunciation_ipas", IndexName: "idx_pronunciation_ipas_entry_id_accent_code_display_order"},
 	{TableName: "pronunciation_ipas", IndexName: "idx_pronunciation_ipas_entry_id_accent_code_primary"},
@@ -244,6 +274,7 @@ var postgresIntegrationExpectedIndexes = []indexExpectation{
 	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_cefr_level_active"},
 	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_oxford_level_active"},
 	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_cet_level_active"},
+	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_school_level_active"},
 	{TableName: "entry_search_terms", IndexName: "idx_entry_search_terms_collins_stars_active"},
 	{TableName: "featured_candidates", IndexName: "idx_featured_candidates_normalized_headword"},
 	{TableName: "featured_candidates", IndexName: "idx_featured_candidates_is_multiword"},
@@ -318,6 +349,13 @@ var postgresIntegrationExpectedSQLManagedIndexDefinitions = []sqlIndexDefinition
 		Method:    "btree",
 		Columns:   []string{"cet_level", "normalized_term"},
 		Predicate: "cet_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_school_level_active",
+		Method:    "btree",
+		Columns:   []string{"school_level", "normalized_term"},
+		Predicate: "school_level > 0",
 	},
 	{
 		TableName: "entry_search_terms",
@@ -456,6 +494,80 @@ var postgresIntegrationExpectedGORMIndexDefinitions = []sqlIndexDefinitionTarget
 		IndexName: "idx_sense_examples_sense_id_example_order",
 		Method:    "btree",
 		Columns:   []string{"sense_id", "example_order"},
+	},
+	{
+		TableName: "entry_definitions",
+		IndexName: "idx_entry_definitions_entry_id",
+		Method:    "btree",
+		Columns:   []string{"entry_id"},
+	},
+	{
+		TableName: "entry_definitions",
+		IndexName: "idx_entry_definitions_sense_id",
+		Method:    "btree",
+		Columns:   []string{"sense_id"},
+	},
+	{
+		TableName: "entry_definitions",
+		IndexName: "idx_entry_definitions_source_run_id",
+		Method:    "btree",
+		Columns:   []string{"source_run_id"},
+	},
+	{
+		TableName: "entry_definitions",
+		IndexName: "idx_entry_definitions_source_updated_at",
+		Method:    "btree",
+		Columns:   []string{"source", "updated_at desc"},
+	},
+	{
+		TableName: "entry_definitions",
+		IndexName: "idx_entry_definitions_entry_id_definition_order",
+		Method:    "btree",
+		Columns:   []string{"entry_id", "definition_order"},
+	},
+	{
+		TableName: "entry_definitions",
+		IndexName: "idx_entry_definitions_entry_id_pos_normalized_zh_hans_key",
+		Unique:    true,
+		Method:    "btree",
+		Columns:   []string{"entry_id", "pos", "normalized_zh_hans_key"},
+	},
+	{
+		TableName: "entry_examples",
+		IndexName: "idx_entry_examples_entry_id",
+		Method:    "btree",
+		Columns:   []string{"entry_id"},
+	},
+	{
+		TableName: "entry_examples",
+		IndexName: "idx_entry_examples_sense_id",
+		Method:    "btree",
+		Columns:   []string{"sense_id"},
+	},
+	{
+		TableName: "entry_examples",
+		IndexName: "idx_entry_examples_source_run_id",
+		Method:    "btree",
+		Columns:   []string{"source_run_id"},
+	},
+	{
+		TableName: "entry_examples",
+		IndexName: "idx_entry_examples_source_updated_at",
+		Method:    "btree",
+		Columns:   []string{"source", "updated_at desc"},
+	},
+	{
+		TableName: "entry_examples",
+		IndexName: "idx_entry_examples_entry_id_example_order",
+		Method:    "btree",
+		Columns:   []string{"entry_id", "example_order"},
+	},
+	{
+		TableName: "entry_examples",
+		IndexName: "idx_entry_examples_entry_id_normalized_sentence_en_key",
+		Unique:    true,
+		Method:    "btree",
+		Columns:   []string{"entry_id", "normalized_sentence_en_key"},
 	},
 	{
 		TableName: "pronunciation_ipas",
@@ -2168,6 +2280,12 @@ func TestRunMigration_PostgresIntegration(t *testing.T) {
 		return
 	}
 
+	if !t.Run("entry content tables enforce structured definition and example contracts", func(t *testing.T) {
+		runEntryContentTablesContractSubtest(t, db)
+	}) {
+		return
+	}
+
 	if !t.Run("CEFR source evidence tables enforce source and level contracts", func(t *testing.T) {
 		runCEFRSourceEvidenceContractSubtest(t, db)
 	}) {
@@ -2235,7 +2353,183 @@ func runInitialMigrationContractSubtest(t *testing.T, db *gorm.DB) {
 		{TableName: "pronunciation_ipas", ColumnName: "accent_code", DataType: "text", UDTName: "text"},
 		{TableName: "pronunciation_audios", ColumnName: "accent_code", DataType: "text", UDTName: "text"},
 		{TableName: "entry_forms", ColumnName: "source_relations", DataType: "ARRAY", UDTName: "_text"},
+		{TableName: "entry_learning_signals", ColumnName: "school_run_id", DataType: "bigint", UDTName: "int8"},
+		{TableName: "entry_definitions", ColumnName: "text_zh_hans", DataType: "text", UDTName: "text"},
+		{TableName: "entry_definitions", ColumnName: "text_en", DataType: "text", UDTName: "text"},
+		{TableName: "entry_examples", ColumnName: "sentence_en", DataType: "text", UDTName: "text"},
+		{TableName: "entry_examples", ColumnName: "sentence_zh_hans", DataType: "text", UDTName: "text"},
+		{TableName: "featured_candidates", ColumnName: "school_level", DataType: "smallint", UDTName: "int2"},
 	})
+}
+
+func runEntryContentTablesContractSubtest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	assertPrimaryKeyColumns(t, db, "entry_definitions", []string{"id"})
+	assertPrimaryKeyColumns(t, db, "entry_examples", []string{"id"})
+	assertIdentityColumnContract(t, db, "entry_definitions")
+	assertIdentityColumnContract(t, db, "entry_examples")
+
+	for _, expectation := range []foreignKeyDeleteRuleExpectation{
+		{TableName: "entry_definitions", ColumnName: "entry_id", ReferencedTableName: "entries", WantDeleteRule: "CASCADE"},
+		{TableName: "entry_definitions", ColumnName: "sense_id", ReferencedTableName: "senses", WantDeleteRule: "SET NULL"},
+		{TableName: "entry_definitions", ColumnName: "source_run_id", ReferencedTableName: "import_runs", WantDeleteRule: "RESTRICT"},
+		{TableName: "entry_examples", ColumnName: "entry_id", ReferencedTableName: "entries", WantDeleteRule: "CASCADE"},
+		{TableName: "entry_examples", ColumnName: "sense_id", ReferencedTableName: "senses", WantDeleteRule: "SET NULL"},
+		{TableName: "entry_examples", ColumnName: "source_run_id", ReferencedTableName: "import_runs", WantDeleteRule: "RESTRICT"},
+		{TableName: "entry_learning_signals", ColumnName: "school_run_id", ReferencedTableName: "import_runs", WantDeleteRule: "RESTRICT"},
+	} {
+		assertForeignKeyDeleteRule(t, db, expectation)
+	}
+
+	startedAt := time.Now().UTC()
+	entryRunID := createImportRun(t, db, "entry-content", "entry", startedAt)
+	definitionRunID := createImportRun(t, db, "entry-content", "definitions", startedAt)
+	exampleRunID := createImportRun(t, db, "entry-content", "examples", startedAt)
+	schoolRunID := createImportRun(t, db, "entry-content", "school", startedAt)
+	entry := seedMigrationFixtureEntry(t, db, "entry-content", entryRunID)
+	sense := seedMigrationFixtureSense(t, db, entry.ID)
+	textEN := "a school definition"
+	sentenceZH := "这是一句例句。"
+
+	definition := model.EntryDefinition{
+		EntryID:             entry.ID,
+		SenseID:             int64Ptr(sense.ID),
+		POS:                 model.POSNoun,
+		Source:              "school",
+		SourceRunID:         definitionRunID,
+		DefinitionOrder:     1,
+		TextZHHans:          "学校",
+		TextEN:              &textEN,
+		NormalizedZHHansKey: "学校",
+		NormalizedENKey:     "a school definition",
+	}
+	createFixtureRecord(t, db, "entry_definition", &definition)
+
+	example := model.EntryExample{
+		EntryID:                 entry.ID,
+		SenseID:                 int64Ptr(sense.ID),
+		Source:                  "school",
+		SourceRunID:             exampleRunID,
+		ExampleOrder:            1,
+		SentenceEN:              "This is a school example.",
+		SentenceZHHans:          &sentenceZH,
+		NormalizedSentenceENKey: "this is a school example",
+		NormalizedSentenceZHKey: "这是一句例句",
+	}
+	createFixtureRecord(t, db, "entry_example", &example)
+
+	createFixtureRecord(t, db, "entry_definition_empty_pos_optional_en", &model.EntryDefinition{
+		EntryID:             entry.ID,
+		POS:                 "",
+		Source:              "school",
+		SourceRunID:         definitionRunID,
+		DefinitionOrder:     2,
+		TextZHHans:          "un. 抓住\n固定下来；生根；扛着",
+		NormalizedZHHansKey: "un 抓住 固定下来 生根 扛着",
+	})
+
+	createFixtureRecord(t, db, "entry_example_missing_zh_translation", &model.EntryExample{
+		EntryID:                 entry.ID,
+		Source:                  "school",
+		SourceRunID:             exampleRunID,
+		ExampleOrder:            2,
+		SentenceEN:              "A school example without a Chinese translation.",
+		NormalizedSentenceENKey: "a school example without a chinese translation",
+	})
+
+	createFixtureRecord(t, db, "entry_content_school_learning_signal", &model.EntryLearningSignal{
+		EntryID:     entry.ID,
+		SchoolLevel: model.SchoolLevelMiddleSchool,
+		SchoolRunID: int64Ptr(schoolRunID),
+	})
+
+	assertImportRunDeleteRestricted(t, db, definitionRunID, "entry_definition")
+	assertImportRunDeleteRestricted(t, db, exampleRunID, "entry_example")
+	assertImportRunDeleteRestricted(t, db, schoolRunID, "entry_learning_school")
+
+	assertUniqueConstraintRejected(t, db, "entry_definition_duplicate_zh", &model.EntryDefinition{
+		EntryID:             entry.ID,
+		POS:                 model.POSNoun,
+		Source:              "ecdict",
+		SourceRunID:         definitionRunID,
+		DefinitionOrder:     2,
+		TextZHHans:          "学校机构",
+		NormalizedZHHansKey: "学校",
+	})
+	assertUniqueConstraintRejected(t, db, "entry_example_duplicate_en", &model.EntryExample{
+		EntryID:                 entry.ID,
+		Source:                  "wiktionary",
+		SourceRunID:             exampleRunID,
+		ExampleOrder:            2,
+		SentenceEN:              "A different sentence.",
+		NormalizedSentenceENKey: "this is a school example",
+	})
+
+	assertCheckConstraintRejected(t, db, "entry_definition_empty_text_zh_hans", &model.EntryDefinition{
+		EntryID:             entry.ID,
+		Source:              "school",
+		SourceRunID:         definitionRunID,
+		DefinitionOrder:     2,
+		TextZHHans:          "",
+		NormalizedZHHansKey: "empty-text",
+	})
+	assertCheckConstraintRejected(t, db, "entry_definition_empty_normalized_key", &model.EntryDefinition{
+		EntryID:             entry.ID,
+		Source:              "school",
+		SourceRunID:         definitionRunID,
+		DefinitionOrder:     2,
+		TextZHHans:          "空键",
+		NormalizedZHHansKey: "",
+	})
+	assertCheckConstraintRejected(t, db, "entry_definition_zero_order", &model.EntryDefinition{
+		EntryID:             entry.ID,
+		Source:              "school",
+		SourceRunID:         definitionRunID,
+		DefinitionOrder:     0,
+		TextZHHans:          "零序",
+		NormalizedZHHansKey: "zero-order",
+	})
+	assertCheckConstraintRejected(t, db, "entry_example_empty_sentence_en", &model.EntryExample{
+		EntryID:                 entry.ID,
+		Source:                  "school",
+		SourceRunID:             exampleRunID,
+		ExampleOrder:            2,
+		SentenceEN:              "",
+		NormalizedSentenceENKey: "empty-sentence",
+	})
+	assertCheckConstraintRejected(t, db, "entry_example_empty_normalized_key", &model.EntryExample{
+		EntryID:                 entry.ID,
+		Source:                  "school",
+		SourceRunID:             exampleRunID,
+		ExampleOrder:            2,
+		SentenceEN:              "Empty normalized key.",
+		NormalizedSentenceENKey: "",
+	})
+	assertCheckConstraintRejected(t, db, "entry_example_zero_order", &model.EntryExample{
+		EntryID:                 entry.ID,
+		Source:                  "school",
+		SourceRunID:             exampleRunID,
+		ExampleOrder:            0,
+		SentenceEN:              "Zero order.",
+		NormalizedSentenceENKey: "zero-order",
+	})
+
+	if err := db.Delete(&model.Sense{}, sense.ID).Error; err != nil {
+		t.Fatalf("Delete(entry content sense) error = %v; want nil", err)
+	}
+	assertModelRowCount(t, db, &model.EntryDefinition{}, 1, "id = ? AND sense_id IS NULL", definition.ID)
+	assertModelRowCount(t, db, &model.EntryExample{}, 1, "id = ? AND sense_id IS NULL", example.ID)
+
+	if err := db.Delete(&model.Entry{}, entry.ID).Error; err != nil {
+		t.Fatalf("Delete(entry content entry) error = %v; want nil", err)
+	}
+	assertModelRowCount(t, db, &model.EntryDefinition{}, 0, "id = ?", definition.ID)
+	assertModelRowCount(t, db, &model.EntryExample{}, 0, "id = ?", example.ID)
+	assertModelRowCount(t, db, &model.EntryLearningSignal{}, 0, "entry_id = ?", entry.ID)
+	assertImportRunDeleteAllowed(t, db, definitionRunID, "entry_definition")
+	assertImportRunDeleteAllowed(t, db, exampleRunID, "entry_example")
+	assertImportRunDeleteAllowed(t, db, schoolRunID, "entry_learning_school")
 }
 
 func runCEFRSourceEvidenceContractSubtest(t *testing.T, db *gorm.DB) {
@@ -2539,6 +2833,12 @@ func runReadModelRefreshSubtest(t *testing.T, db *gorm.DB) {
 		CEFRSource: model.CEFRSourceCEFRJ,
 	})
 
+	schoolOnlyEntry := createReadModelEntry(t, db, sourceRunID, "Placement Test", model.POSPhrase)
+	createFixtureRecord(t, db, "read_model_school_only_learning_signal", &model.EntryLearningSignal{
+		EntryID:     schoolOnlyEntry.ID,
+		SchoolLevel: model.SchoolLevelMiddleSchool,
+	})
+
 	if err := RefreshReadModels(db); err != nil {
 		t.Fatalf("RefreshReadModels() error = %v; want nil", err)
 	}
@@ -2556,8 +2856,9 @@ func runReadModelRefreshSubtest(t *testing.T, db *gorm.DB) {
 
 	assertReadModelSearchTerms(t, db, phraseEntry, phraseForm, phraseAlias)
 	assertReadModelMissingSignalsDefaultToZero(t, db, missingSignalEntry.ID)
-	assertFeaturedCandidate(t, db, phraseEntry.ID, true, 42)
-	assertFeaturedCandidate(t, db, cefrOnlyEntry.ID, false, 999999)
+	assertFeaturedCandidate(t, db, phraseEntry.ID, true, 42, model.SchoolLevelHighSchool)
+	assertFeaturedCandidate(t, db, cefrOnlyEntry.ID, false, 999999, model.SchoolLevelUnknown)
+	assertFeaturedCandidate(t, db, schoolOnlyEntry.ID, true, 999999, model.SchoolLevelMiddleSchool)
 	assertModelRowCount(t, db, &model.FeaturedCandidate{}, 0, "entry_id = ?", missingSignalEntry.ID)
 	assertFeaturedCandidatesMatchSourceJoin(t, db)
 }
@@ -2695,7 +2996,7 @@ func assertReadModelMissingSignalsDefaultToZero(t *testing.T, db *gorm.DB, entry
 	assertSearchTermLearningFields(t, term, 0, 0, 0, 0, 0, 0, 0)
 }
 
-func assertFeaturedCandidate(t *testing.T, db *gorm.DB, entryID int64, wantMultiword bool, wantQualityRank int) {
+func assertFeaturedCandidate(t *testing.T, db *gorm.DB, entryID int64, wantMultiword bool, wantQualityRank int, wantSchoolLevel int16) {
 	t.Helper()
 
 	var candidate model.FeaturedCandidate
@@ -2707,6 +3008,9 @@ func assertFeaturedCandidate(t *testing.T, db *gorm.DB, entryID int64, wantMulti
 	}
 	if candidate.QualityRank != wantQualityRank {
 		t.Fatalf("featured_candidates entry_id=%d quality_rank = %d; want %d", entryID, candidate.QualityRank, wantQualityRank)
+	}
+	if candidate.SchoolLevel != wantSchoolLevel {
+		t.Fatalf("featured_candidates entry_id=%d school_level = %d; want %d", entryID, candidate.SchoolLevel, wantSchoolLevel)
 	}
 }
 
@@ -2729,10 +3033,11 @@ func assertFeaturedCandidatesMatchSourceJoin(t *testing.T, db *gorm.DB) {
 				ls.oxford_level,
 				ls.cet_level,
 				ls.collins_stars,
+				ls.school_level,
 				CASE WHEN ls.frequency_rank > 0 THEN ls.frequency_rank ELSE 999999 END AS quality_rank
 			FROM entries e
 			JOIN entry_learning_signals ls ON ls.entry_id = e.id
-			WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0
+			WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
 		),
 		actual AS (
 			SELECT
@@ -2746,6 +3051,7 @@ func assertFeaturedCandidatesMatchSourceJoin(t *testing.T, db *gorm.DB) {
 				oxford_level,
 				cet_level,
 				collins_stars,
+				school_level,
 				quality_rank
 			FROM featured_candidates
 		),
@@ -4277,8 +4583,8 @@ func postgresIntegrationResetStatements() []string {
 func assertMigrationTablesExist(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
-	if len(postgresIntegrationExpectedTables) != 19 {
-		t.Fatalf("postgresIntegrationExpectedTables = %d; want 19-table contract", len(postgresIntegrationExpectedTables))
+	if len(postgresIntegrationExpectedTables) != 21 {
+		t.Fatalf("postgresIntegrationExpectedTables = %d; want 21-table contract", len(postgresIntegrationExpectedTables))
 	}
 
 	actualTables, err := loadCurrentSchemaTableNames(db)
@@ -4632,6 +4938,22 @@ func assertColumnTypes(t *testing.T, db *gorm.DB, expectations []columnExpectati
 	}
 }
 
+func assertIdentityColumnContract(t *testing.T, db *gorm.DB, tableName string) {
+	t.Helper()
+
+	currentSchema, err := loadCurrentSchema(db)
+	if err != nil {
+		t.Fatalf("loadCurrentSchema() error = %v; want nil", err)
+	}
+	state, err := loadIdentityColumnState(db, tableName)
+	if err != nil {
+		t.Fatalf("loadIdentityColumnState(%s) error = %v; want nil", tableName, err)
+	}
+	if issue := identityColumnStateIssue(tableName, currentSchema, state); issue != "" {
+		t.Fatalf("identityColumnStateIssue(%s) = %q; want generated always identity", tableName, issue)
+	}
+}
+
 func loadColumnMetadata(db *gorm.DB, tableName, columnName string) (columnMetadata, error) {
 	var metadata columnMetadata
 
@@ -4650,6 +4972,57 @@ func loadColumnMetadata(db *gorm.DB, tableName, columnName string) (columnMetada
 	}
 
 	return metadata, nil
+}
+
+func assertForeignKeyDeleteRule(t *testing.T, db *gorm.DB, expectation foreignKeyDeleteRuleExpectation) {
+	t.Helper()
+
+	var rows []struct {
+		DeleteRule string `gorm:"column:delete_rule"`
+	}
+	if err := db.Raw(`
+		SELECT CASE con.confdeltype
+			WHEN 'a' THEN 'NO ACTION'
+			WHEN 'r' THEN 'RESTRICT'
+			WHEN 'c' THEN 'CASCADE'
+			WHEN 'n' THEN 'SET NULL'
+			WHEN 'd' THEN 'SET DEFAULT'
+			ELSE con.confdeltype::text
+		END AS delete_rule
+		FROM pg_constraint con
+		JOIN pg_class child_cls ON child_cls.oid = con.conrelid
+		JOIN pg_namespace child_ns ON child_ns.oid = child_cls.relnamespace
+		JOIN pg_class parent_cls ON parent_cls.oid = con.confrelid
+		JOIN pg_attribute child_att ON child_att.attrelid = con.conrelid
+		WHERE child_ns.nspname = current_schema()
+		  AND con.contype = 'f'
+		  AND child_cls.relname = ?
+		  AND parent_cls.relname = ?
+		  AND child_att.attname = ?
+		  AND child_att.attnum = ANY(con.conkey)
+	`, expectation.TableName, expectation.ReferencedTableName, expectation.ColumnName).Scan(&rows).Error; err != nil {
+		t.Fatalf("load foreign key delete rule for %s.%s: %v", expectation.TableName, expectation.ColumnName, err)
+	}
+
+	if len(rows) != 1 {
+		t.Fatalf(
+			"foreign keys for %s.%s -> %s = %d; want exactly 1",
+			expectation.TableName,
+			expectation.ColumnName,
+			expectation.ReferencedTableName,
+			len(rows),
+		)
+	}
+	if rows[0].DeleteRule != expectation.WantDeleteRule {
+		t.Fatalf(
+			"foreign key %s.%s -> %s delete rule = %q; want %q",
+			expectation.TableName,
+			expectation.ColumnName,
+			expectation.ReferencedTableName,
+			rows[0].DeleteRule,
+			expectation.WantDeleteRule,
+		)
+	}
 }
 
 func assertPrimaryKeyColumns(t *testing.T, db *gorm.DB, tableName string, wantColumns []string) {
@@ -4721,6 +5094,7 @@ func seedMigrationFixture(t *testing.T, db *gorm.DB, suffix string) migrationFix
 
 	seedMigrationFixtureGlosses(t, db, suffix, sense.ID, importRunIDs[importRunKeySenseGlossZH])
 	seedMigrationFixtureSenseMetadata(t, db, suffix, sense.ID)
+	seedMigrationFixtureEntryContent(t, db, suffix, entry.ID, sense.ID, importRunIDs)
 	seedMigrationFixturePronunciations(t, db, suffix, entry.ID)
 	form := seedMigrationFixtureForm(t, db, suffix, entry.ID)
 	seedMigrationFixtureSummaryAndSignals(t, db, suffix, entry.ID, sense.ID, importRunIDs)
@@ -4812,6 +5186,39 @@ func seedMigrationFixtureSenseMetadata(t *testing.T, db *gorm.DB, suffix string,
 	createFixtureRecord(t, db, "sense_example", &senseExample)
 }
 
+func seedMigrationFixtureEntryContent(t *testing.T, db *gorm.DB, suffix string, entryID, senseID int64, importRunIDs map[string]int64) {
+	t.Helper()
+
+	textEN := "school definition " + suffix
+	entryDefinition := model.EntryDefinition{
+		EntryID:             entryID,
+		SenseID:             int64Ptr(senseID),
+		POS:                 model.POSNoun,
+		Source:              "school",
+		SourceRunID:         importRunIDs[importRunKeyEntryDefinition],
+		DefinitionOrder:     1,
+		TextZHHans:          "学校释义-" + suffix,
+		TextEN:              &textEN,
+		NormalizedZHHansKey: "学校释义-" + suffix,
+		NormalizedENKey:     "school definition " + suffix,
+	}
+	createFixtureRecord(t, db, "entry_definition", &entryDefinition)
+
+	sentenceZH := "学校例句-" + suffix
+	entryExample := model.EntryExample{
+		EntryID:                 entryID,
+		SenseID:                 int64Ptr(senseID),
+		Source:                  "school",
+		SourceRunID:             importRunIDs[importRunKeyEntryExample],
+		ExampleOrder:            1,
+		SentenceEN:              "school example " + suffix,
+		SentenceZHHans:          &sentenceZH,
+		NormalizedSentenceENKey: "school example " + suffix,
+		NormalizedSentenceZHKey: "学校例句-" + suffix,
+	}
+	createFixtureRecord(t, db, "entry_example", &entryExample)
+}
+
 func seedMigrationFixturePronunciations(t *testing.T, db *gorm.DB, suffix string, entryID int64) {
 	t.Helper()
 
@@ -4871,6 +5278,8 @@ func seedMigrationFixtureSummaryAndSignals(t *testing.T, db *gorm.DB, suffix str
 		OxfordRunID:    int64Ptr(importRunIDs[importRunKeyEntryLearningOxford]),
 		CETLevel:       model.CETLevel4,
 		CETRunID:       int64Ptr(importRunIDs[importRunKeyEntryLearningCET]),
+		SchoolLevel:    model.SchoolLevelMiddleSchool,
+		SchoolRunID:    int64Ptr(importRunIDs[importRunKeyEntryLearningSchool]),
 		FrequencyRank:  10,
 		FrequencyCount: 100,
 		FrequencyRunID: int64Ptr(importRunIDs[importRunKeyEntryLearningFrequency]),
@@ -5009,6 +5418,8 @@ func assertEntryOwnedCascadeRows(t *testing.T, db *gorm.DB, fixture migrationFix
 	assertModelRowCount(t, db, &model.PronunciationAudio{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryForm{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntrySummaryZH{}, want, "entry_id = ?", fixture.EntryID)
+	assertModelRowCount(t, db, &model.EntryDefinition{}, want, "entry_id = ?", fixture.EntryID)
+	assertModelRowCount(t, db, &model.EntryExample{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryLearningSignal{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryCEFRSourceSignal{}, want, "entry_id = ?", fixture.EntryID)
 	assertModelRowCount(t, db, &model.EntryEtymology{}, want, "entry_id = ?", fixture.EntryID)

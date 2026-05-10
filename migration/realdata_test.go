@@ -23,6 +23,8 @@ var postgresRealDataCanonicalTables = []string{
 	"sense_glosses_zh",
 	"sense_labels",
 	"sense_examples",
+	"entry_definitions",
+	"entry_examples",
 	"pronunciation_ipas",
 	"pronunciation_audios",
 	"entry_forms",
@@ -103,6 +105,10 @@ func loadPostgresRealDataTableCounts(t *testing.T, db *gorm.DB, tableNames []str
 
 	counts := make(map[string]int64, len(tableNames))
 	for _, tableName := range tableNames {
+		if !db.Migrator().HasTable(tableName) {
+			counts[tableName] = 0
+			continue
+		}
 		counts[tableName] = loadTableRowCount(t, db, tableName)
 	}
 
@@ -183,7 +189,7 @@ func assertPostgresRealDataReadModelCounts(t *testing.T, db *gorm.DB) {
 				SELECT COUNT(*)
 				FROM entries e
 				JOIN entry_learning_signals ls ON ls.entry_id = e.id
-				WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0
+				WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
 			) AS featured_source_count,
 			(SELECT COUNT(*) FROM featured_candidates) AS featured_candidate_count,
 			(SELECT COUNT(*) FROM entry_search_terms WHERE term_kind NOT IN ('headword', 'form', 'alias')) AS invalid_search_term_kind_rows
@@ -308,10 +314,11 @@ func assertPostgresRealDataFeaturedCandidatesMatchSource(t *testing.T, db *gorm.
 				ls.oxford_level,
 				ls.cet_level,
 				ls.collins_stars,
+				ls.school_level,
 				CASE WHEN ls.frequency_rank > 0 THEN ls.frequency_rank ELSE 999999 END AS quality_rank
 			FROM entries e
 			JOIN entry_learning_signals ls ON ls.entry_id = e.id
-			WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0
+			WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
 		),
 		actual AS (
 			SELECT
@@ -325,6 +332,7 @@ func assertPostgresRealDataFeaturedCandidatesMatchSource(t *testing.T, db *gorm.
 				oxford_level,
 				cet_level,
 				collins_stars,
+				school_level,
 				quality_rank
 			FROM featured_candidates
 		),

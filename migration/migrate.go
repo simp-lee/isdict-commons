@@ -57,6 +57,8 @@ var migrationTargets = []migrationTarget{
 	{TableName: "sense_glosses_zh", Model: &model.SenseGlossZH{}},
 	{TableName: "sense_labels", Model: &model.SenseLabel{}},
 	{TableName: "sense_examples", Model: &model.SenseExample{}},
+	{TableName: "entry_definitions", Model: &model.EntryDefinition{}},
+	{TableName: "entry_examples", Model: &model.EntryExample{}},
 	{TableName: "pronunciation_ipas", Model: &model.PronunciationIPA{}},
 	{TableName: "pronunciation_audios", Model: &model.PronunciationAudio{}},
 	{TableName: "entry_forms", Model: &model.EntryForm{}},
@@ -79,6 +81,8 @@ var identityManagedTables = []string{
 	"sense_glosses_zh",
 	"sense_labels",
 	"sense_examples",
+	"entry_definitions",
+	"entry_examples",
 	"pronunciation_ipas",
 	"pronunciation_audios",
 	"entry_forms",
@@ -100,6 +104,8 @@ var dropTargets = []any{
 	&model.EntryForm{},
 	&model.PronunciationAudio{},
 	&model.PronunciationIPA{},
+	&model.EntryExample{},
+	&model.EntryDefinition{},
 	&model.SenseExample{},
 	&model.SenseLabel{},
 	&model.SenseGlossZH{},
@@ -129,6 +135,18 @@ var expectedIndexes = []indexTarget{
 	{TableName: "sense_labels", Model: &model.SenseLabel{}, IndexName: "idx_sense_labels_label_type_label_code"},
 	{TableName: "sense_examples", Model: &model.SenseExample{}, IndexName: "idx_sense_examples_sense_id_source_example_order"},
 	{TableName: "sense_examples", Model: &model.SenseExample{}, IndexName: "idx_sense_examples_sense_id_example_order"},
+	{TableName: "entry_definitions", Model: &model.EntryDefinition{}, IndexName: "idx_entry_definitions_entry_id"},
+	{TableName: "entry_definitions", Model: &model.EntryDefinition{}, IndexName: "idx_entry_definitions_sense_id"},
+	{TableName: "entry_definitions", Model: &model.EntryDefinition{}, IndexName: "idx_entry_definitions_source_run_id"},
+	{TableName: "entry_definitions", Model: &model.EntryDefinition{}, IndexName: "idx_entry_definitions_source_updated_at"},
+	{TableName: "entry_definitions", Model: &model.EntryDefinition{}, IndexName: "idx_entry_definitions_entry_id_definition_order"},
+	{TableName: "entry_definitions", Model: &model.EntryDefinition{}, IndexName: "idx_entry_definitions_entry_id_pos_normalized_zh_hans_key"},
+	{TableName: "entry_examples", Model: &model.EntryExample{}, IndexName: "idx_entry_examples_entry_id"},
+	{TableName: "entry_examples", Model: &model.EntryExample{}, IndexName: "idx_entry_examples_sense_id"},
+	{TableName: "entry_examples", Model: &model.EntryExample{}, IndexName: "idx_entry_examples_source_run_id"},
+	{TableName: "entry_examples", Model: &model.EntryExample{}, IndexName: "idx_entry_examples_source_updated_at"},
+	{TableName: "entry_examples", Model: &model.EntryExample{}, IndexName: "idx_entry_examples_entry_id_example_order"},
+	{TableName: "entry_examples", Model: &model.EntryExample{}, IndexName: "idx_entry_examples_entry_id_normalized_sentence_en_key"},
 	{TableName: "pronunciation_ipas", Model: &model.PronunciationIPA{}, IndexName: "idx_pronunciation_ipas_entry_id_accent_code_ipa"},
 	{TableName: "pronunciation_ipas", Model: &model.PronunciationIPA{}, IndexName: "idx_pronunciation_ipas_entry_id_accent_code_display_order"},
 	{TableName: "pronunciation_ipas", Model: &model.PronunciationIPA{}, IndexName: "idx_pronunciation_ipas_entry_id_accent_code_primary"},
@@ -169,6 +187,7 @@ var expectedIndexes = []indexTarget{
 	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_cefr_level_active"},
 	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_oxford_level_active"},
 	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_cet_level_active"},
+	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_school_level_active"},
 	{TableName: "entry_search_terms", Model: &model.EntrySearchTerm{}, IndexName: "idx_entry_search_terms_collins_stars_active"},
 	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}, IndexName: "idx_featured_candidates_normalized_headword"},
 	{TableName: "featured_candidates", Model: &model.FeaturedCandidate{}, IndexName: "idx_featured_candidates_is_multiword"},
@@ -250,6 +269,13 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 	},
 	{
 		TableName: "entry_search_terms",
+		IndexName: "idx_entry_search_terms_school_level_active",
+		Method:    "btree",
+		Columns:   []string{"school_level", "normalized_term"},
+		Predicate: "school_level > 0",
+	},
+	{
+		TableName: "entry_search_terms",
 		IndexName: "idx_entry_search_terms_collins_stars_active",
 		Method:    "btree",
 		Columns:   []string{"collins_stars", "normalized_term"},
@@ -270,7 +296,7 @@ var sqlManagedIndexDefinitions = []sqlIndexDefinitionTarget{
 	},
 }
 
-const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, pronunciation_ipas, pronunciation_audios, entry_forms, headword_relation_edges, entry_summaries_zh, entry_learning_signals, entry_cefr_source_signals, sense_learning_signals, sense_cefr_source_signals, entry_etymologies, entry_search_terms, featured_candidates`
+const analyzeTablesSQL = `ANALYZE import_runs, entries, senses, sense_glosses_en, sense_glosses_zh, sense_labels, sense_examples, entry_definitions, entry_examples, pronunciation_ipas, pronunciation_audios, entry_forms, headword_relation_edges, entry_summaries_zh, entry_learning_signals, entry_cefr_source_signals, sense_learning_signals, sense_cefr_source_signals, entry_etymologies, entry_search_terms, featured_candidates`
 
 // MigrateOptions controls schema reset and verbose progress logging for RunMigration.
 // ANALYZE is intentionally best-effort and always attempted; failures are warned about,
@@ -280,7 +306,7 @@ type MigrateOptions struct {
 	Verbose    bool
 }
 
-// RunMigration applies the full schema migration for the current 19-table model set.
+// RunMigration applies the full schema migration for the current 21-table model set.
 // ANALYZE is best-effort: the migration always attempts it and logs a warning if it fails.
 func RunMigration(db *gorm.DB, opts MigrateOptions) error {
 	if db == nil {

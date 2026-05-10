@@ -39,6 +39,7 @@ type FeaturedCandidate struct {
 	OxfordLevel        int16  `gorm:"type:smallint;not null;default:0;check:oxford_level >= 0 AND oxford_level <= 2"`
 	CETLevel           int16  `gorm:"type:smallint;not null;default:0;check:cet_level >= 0 AND cet_level <= 2"`
 	CollinsStars       int16  `gorm:"type:smallint;not null;default:0;check:collins_stars >= 0 AND collins_stars <= 5"`
+	SchoolLevel        int16  `gorm:"type:smallint;not null;default:0;check:school_level >= 0 AND school_level <= 3"`
 	QualityRank        int    `gorm:"type:integer;not null;check:quality_rank > 0;index:idx_featured_candidates_quality_rank;index:idx_featured_candidates_is_multiword_quality_rank,priority:2"`
 
 	Entry Entry `gorm:"foreignKey:EntryID;references:ID;constraint:OnDelete:CASCADE"`

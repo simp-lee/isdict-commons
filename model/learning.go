@@ -13,6 +13,7 @@ type EntryLearningSignal struct {
 	CETLevel       int16  `gorm:"type:smallint;not null;default:0;check:cet_level >= 0 AND cet_level <= 2;index:idx_entry_learning_signals_cet_level"`
 	CETRunID       *int64 `gorm:"type:bigint;autoIncrement:false"`
 	SchoolLevel    int16  `gorm:"type:smallint;not null;default:0;check:school_level >= 0 AND school_level <= 3;index:idx_entry_learning_signals_school_level"`
+	SchoolRunID    *int64 `gorm:"type:bigint;autoIncrement:false"`
 	FrequencyRank  int    `gorm:"type:integer;not null;default:0;check:frequency_rank >= 0;index:idx_entry_learning_signals_frequency_rank"`
 	FrequencyCount int    `gorm:"type:integer;not null;default:0;check:frequency_count >= 0"`
 	FrequencyRunID *int64 `gorm:"type:bigint;autoIncrement:false"`
@@ -23,6 +24,7 @@ type EntryLearningSignal struct {
 	CEFRRun      *ImportRun `gorm:"foreignKey:CEFRRunID;references:ID;constraint:OnDelete:RESTRICT"`
 	OxfordRun    *ImportRun `gorm:"foreignKey:OxfordRunID;references:ID;constraint:OnDelete:RESTRICT"`
 	CETRun       *ImportRun `gorm:"foreignKey:CETRunID;references:ID;constraint:OnDelete:RESTRICT"`
+	SchoolRun    *ImportRun `gorm:"foreignKey:SchoolRunID;references:ID;constraint:OnDelete:RESTRICT"`
 	FrequencyRun *ImportRun `gorm:"foreignKey:FrequencyRunID;references:ID;constraint:OnDelete:RESTRICT"`
 	CollinsRun   *ImportRun `gorm:"foreignKey:CollinsRunID;references:ID;constraint:OnDelete:RESTRICT"`
 

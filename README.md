@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/go-1.25-blue.svg)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Shared Go commons layer for the isdict pipeline and downstream services. This module owns the current 19-table PostgreSQL schema, shared GORM models, controlled enums, deterministic normalization helpers, and the PostgreSQL migration entrypoint used across repos.
+Shared Go commons layer for the isdict pipeline and downstream services. This module owns the current 21-table PostgreSQL schema, shared GORM models, controlled enums, deterministic normalization helpers, and the PostgreSQL migration entrypoint used across repos.
 
 ## Installation
 
@@ -17,14 +17,14 @@ Requirements: Go 1.25 language features with a patched Go toolchain at Go 1.26.2
 
 ```text
 isdict-commons/
-├── model/      # 19-table GORM schema and shared controlled values
+├── model/      # 21-table GORM schema and shared controlled values
 ├── norm/       # Deterministic normalization helpers and frozen alias maps
 └── migration/  # PostgreSQL schema migration and verification entrypoint
 ```
 
 ## Current Schema
 
-The model package maps to these 19 tables:
+The model package maps to these 21 tables:
 
 | Table | Model | Purpose |
 | --- | --- | --- |
@@ -35,6 +35,8 @@ The model package maps to these 19 tables:
 | `sense_glosses_zh` | `SenseGlossZH` | Ordered zh-Hans glosses with provenance |
 | `sense_labels` | `SenseLabel` | Controlled sense labels |
 | `sense_examples` | `SenseExample` | Ordered example sentences |
+| `entry_definitions` | `EntryDefinition` | Structured entry/sense-optional zh-Hans definitions |
+| `entry_examples` | `EntryExample` | Canonical entry-level examples with optional sense alignment |
 | `pronunciation_ipas` | `PronunciationIPA` | IPA pronunciations |
 | `pronunciation_audios` | `PronunciationAudio` | Audio filename records |
 | `entry_forms` | `EntryForm` | Forms and aliases |
@@ -56,7 +58,7 @@ The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries pr
 
 Search consumers should use `entry_search_terms.normalized_term`, not trigram-search `entries.normalized_headword` or `entry_forms.normalized_form` directly. The source-table btree indexes remain for exact lookup, but their old trigram indexes are dropped. `entry_search_terms` carries the trigram GIN index, prefix btree index, `entry_id`, `pos`, `is_multiword + normalized_term`, and positive learning-signal partial indexes.
 
-`featured_candidates` is the derived read model for featured recommendation candidates. It materializes entries that have `entry_learning_signals.frequency_rank > 0 OR entry_learning_signals.cefr_level > 0`, carries the fields needed for ranking and word/phrase splitting, and avoids downstream runtime joins between `entries` and `entry_learning_signals`.
+`featured_candidates` is the derived read model for featured recommendation candidates. It materializes entries that have `entry_learning_signals.frequency_rank > 0 OR entry_learning_signals.cefr_level > 0 OR entry_learning_signals.school_level > 0`, carries the fields needed for ranking and word/phrase splitting, and avoids downstream runtime joins between `entries` and `entry_learning_signals`.
 
 Both read models are maintained by migration/import refresh code; they are not business source data. `RunMigration` refreshes them once after schema/index migration, and full importers should call `migration.RefreshReadModels(db)` after `entries`, `entry_forms`, and `entry_learning_signals` are loaded.
 
@@ -77,6 +79,16 @@ Open English WordNet 2025 Edition is the only lexical relation source. Wiktionar
 `entry_cefr_source_signals` and `sense_cefr_source_signals` store the per-source raw CEFR evidence before aggregation. Their composite primary keys are `(entry_id, cefr_source)` and `(sense_id, cefr_source)`, `cefr_source` only allows `oxford`, `cefrj`, and `octanove`, and `cefr_level` uses the same `0..6` scale. `cefr_run_id` points at `import_runs.id` for provenance.
 
 `OxfordLevel` / `oxford_level` is Oxford 3000/5000 list membership (`0..2`), not an Oxford CEFR A1-C2 level. Oxford CEFR evidence belongs in the source evidence tables with `cefr_source='oxford'`.
+
+`SchoolLevel` / `school_level` remains the aggregated learning stage (`0..3`) used by products and read models. It does not represent a specific textbook source, textbook appearance count, or learner-facing source label. `entry_learning_signals.school_run_id` stores internal import-run provenance for idempotent school imports and validation only. School vocabulary sources can contain word-only rows without definitions; those rows belong in learning signals, not in `entry_definitions`.
+
+### Entry Content
+
+`entry_definitions` stores structured dictionary definitions for entry-level content and optional sense-aligned content. It supports source families such as `wiktionary`, `ecdict`, and `school` without limiting the allowed source names. `sense_id` is nullable because school or ECDICT definitions should only be attached to a Wiktionary sense when the importer has high-confidence alignment. Chinese definition text is required, and `normalized_zh_hans_key` is importer-provided for duplicate prevention within the same entry and POS.
+
+`entry_examples` is the canonical entry-level bilingual examples table. It supports Wiktionary and school examples, nullable `sense_id`, required English sentence text, optional zh-Hans translation, and importer-provided normalized sentence keys for duplicate prevention under each entry.
+
+For both tables, `source` and `source_run_id` are internal provenance used for replay, replacement, and validation. They do not mean downstream products must display source labels to learners.
 
 ## Shared Enums And Normalization
 
@@ -126,7 +138,7 @@ func run(dsn string) error {
 }
 ```
 
-`RunMigration` runs `AutoMigrate` for all 19 tables, executes the embedded SQL files under `migration/sql/`, refreshes `entry_search_terms` and `featured_candidates`, runs `ANALYZE` as best-effort, and verifies that required tables, `pg_trgm`, indexes, and the managed `id` identity columns/sequences are present and aligned.
+`RunMigration` runs `AutoMigrate` for all 21 tables, executes the embedded SQL files under `migration/sql/`, refreshes `entry_search_terms` and `featured_candidates`, runs `ANALYZE` as best-effort, and verifies that required tables, `pg_trgm`, indexes, and the managed `id` identity columns/sequences are present and aligned.
 
 After a full importer load, refresh the derived read models explicitly:
 
@@ -139,7 +151,7 @@ if err := migration.RefreshReadModels(db); err != nil {
 Recommended downstream query direction:
 
 - Search/suggestion/fuzzy phrase search: query `entry_search_terms`, filter on `normalized_term`, `term_kind`, `pos`, `is_multiword`, and the denormalized learning-signal fields, then order by `term_rank`, `frequency_rank`, and stable tie-breakers.
-- Featured words/phrases: query `featured_candidates`, filter by `is_multiword`, and order by `quality_rank`, then optional learning-signal tie-breakers such as `cefr_level DESC`, `collins_stars DESC`, and `entry_id`.
+- Featured words/phrases: query `featured_candidates`, filter by `is_multiword`, and order by `quality_rank`, then optional learning-signal tie-breakers such as `cefr_level DESC`, `collins_stars DESC`, `school_level ASC`, and `entry_id`.
 
 ## Testing
 
@@ -171,7 +183,7 @@ go test ./migration -run TestRunMigration_PostgresRealData -count=1 -timeout=30m
 
 This repository now reflects the v1.0.0 schema reset.
 
-- Removed the legacy `Word`, legacy `Sense`, `Example`, `Pronunciation`, and `WordVariant` model set. Use the current 19-table schema instead.
+- Removed the legacy `Word`, legacy `Sense`, `Example`, `Pronunciation`, and `WordVariant` model set. Use the current 21-table schema instead.
 - Removed API response structs from commons. Response DTOs belong in downstream repos.
 - Removed `textutil.ToNormalized`. Use `norm.NormalizeHeadword` and the other `norm` helpers.
 - Removed `migration.NewMigrator` and `Migrator.Migrate`. Use `migration.RunMigration(db, migration.MigrateOptions{...})`.

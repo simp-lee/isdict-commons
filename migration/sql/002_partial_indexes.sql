@@ -30,6 +30,10 @@ CREATE INDEX IF NOT EXISTS idx_entry_search_terms_cet_level_active
 ON entry_search_terms (cet_level, normalized_term)
 WHERE cet_level > 0;
 
+CREATE INDEX IF NOT EXISTS idx_entry_search_terms_school_level_active
+ON entry_search_terms (school_level, normalized_term)
+WHERE school_level > 0;
+
 CREATE INDEX IF NOT EXISTS idx_entry_search_terms_collins_stars_active
 ON entry_search_terms (collins_stars, normalized_term)
 WHERE collins_stars > 0;
