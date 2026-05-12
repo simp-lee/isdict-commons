@@ -58,7 +58,9 @@ The schema is PostgreSQL-first: primary keys are `int64`, `ImportRun` carries pr
 
 Search consumers should use `entry_search_terms.normalized_term`, not trigram-search `entries.normalized_headword` or `entry_forms.normalized_form` directly. The source-table btree indexes remain for exact lookup, but their old trigram indexes are dropped. `entry_search_terms` carries the trigram GIN index, prefix btree index, `entry_id`, `pos`, `is_multiword + normalized_term`, and positive learning-signal partial indexes.
 
-`featured_candidates` is the derived read model for featured recommendation candidates. It materializes entries that have `entry_learning_signals.frequency_rank > 0 OR entry_learning_signals.cefr_level > 0 OR entry_learning_signals.school_level > 0`, carries the fields needed for ranking and word/phrase splitting, and avoids downstream runtime joins between `entries` and `entry_learning_signals`.
+`featured_candidates` is the canonical derived read model for featured recommendation candidates. Eligibility is `entry_learning_signals.frequency_rank > 0 OR entry_learning_signals.cefr_level > 0 OR entry_learning_signals.school_level > 0`, then the read model keeps exactly one best entry per `normalized_headword`, enforced by a unique index. It preserves `entry_id` so downstream jobs can hydrate the selected entry exactly, carries the fields needed for word/phrase splitting, and avoids downstream runtime joins or re-derivation of candidate eligibility.
+
+`featured_candidates.quality_rank` is the final stable ordering position in that selected candidate pool. It fully encodes the featured ranking order; it is not a copy of `frequency_rank`.
 
 Both read models are maintained by migration/import refresh code; they are not business source data. `RunMigration` refreshes them once after schema/index migration, and full importers should call `migration.RefreshReadModels(db)` after `entries`, `entry_forms`, and `entry_learning_signals` are loaded.
 
@@ -151,7 +153,7 @@ if err := migration.RefreshReadModels(db); err != nil {
 Recommended downstream query direction:
 
 - Search/suggestion/fuzzy phrase search: query `entry_search_terms`, filter on `normalized_term`, `term_kind`, `pos`, `is_multiword`, and the denormalized learning-signal fields, then order by `term_rank`, `frequency_rank`, and stable tie-breakers.
-- Featured words/phrases: query `featured_candidates`, filter by `is_multiword`, and order by `quality_rank`, then optional learning-signal tie-breakers such as `cefr_level DESC`, `collins_stars DESC`, `school_level ASC`, and `entry_id`.
+- Featured words/phrases: query `featured_candidates`, filter or group by `is_multiword`, and order by `quality_rank, entry_id`. Downstream consumers should not re-derive candidate eligibility or entry ranking.
 
 ## Testing
 
@@ -171,7 +173,7 @@ go test ./migration
 
 The integration test skips when `-short` is enabled, when `ISDICT_TEST_POSTGRES_DSN` is unset, or when `ISDICT_TEST_POSTGRES_ALLOW_DESTRUCTIVE_RESET=drop-public-migration-tables` is not set. The default-safe path is a hostless local DSN with `search_path=public`; if your shell exports `PGSERVICE`, leave it unset, and if it exports `PGHOST`, leave it unset or point it at an approved local Unix socket directory such as `/var/run/postgresql`. If you intentionally need an explicit host or `service`/`servicefile` indirection for a disposable remote CI target, also set `ISDICT_TEST_POSTGRES_ALLOW_REMOTE_DSN=allow-remote-disposable-instance`; otherwise those connections are rejected by design. Its cleanup path is intentionally strict: it refuses to run unless the database name is one of `isdict_test`, `isdict_test_db`, `isdict_integration_test`, `isdict_integration_test_db`, `isdict_migration_test`, or `isdict_migration_test_db`, `current_schema()` is `public`, and the normalized `search_path` is exactly `public`. Point it at one of those dedicated disposable test databases only.
 
-The real-data PostgreSQL test is a separate opt-in path for an existing imported database. It runs `RunMigration` with `DropTables=false`, verifies source-table row counts stay unchanged, refreshes only the derived read models, and checks that `entry_search_terms` and `featured_candidates` exactly match the source joins:
+The real-data PostgreSQL test is a separate opt-in path for an existing imported database. It runs `RunMigration` with `DropTables=false`, verifies source-table row counts stay unchanged, refreshes only the derived read models, checks that `entry_search_terms` matches the source join, and checks that `featured_candidates` matches the canonical selected-candidate CTE:
 
 ```bash
 ISDICT_REALDATA_POSTGRES_DSN='host=localhost port=5432 user=isdict password=... dbname=isdict_db sslmode=disable TimeZone=Asia/Shanghai' \

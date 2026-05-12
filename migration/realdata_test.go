@@ -174,7 +174,7 @@ func assertPostgresRealDataReadModelCounts(t *testing.T, db *gorm.DB) {
 		SearchTermCount           int64 `gorm:"column:search_term_count"`
 		HeadwordSearchTermCount   int64 `gorm:"column:headword_search_term_count"`
 		FormAliasSearchTermCount  int64 `gorm:"column:form_alias_search_term_count"`
-		FeaturedSourceCount       int64 `gorm:"column:featured_source_count"`
+		FeaturedHeadwordCount     int64 `gorm:"column:featured_headword_count"`
 		FeaturedCandidateCount    int64 `gorm:"column:featured_candidate_count"`
 		InvalidSearchTermKindRows int64 `gorm:"column:invalid_search_term_kind_rows"`
 	}
@@ -186,11 +186,11 @@ func assertPostgresRealDataReadModelCounts(t *testing.T, db *gorm.DB) {
 			(SELECT COUNT(*) FROM entry_search_terms WHERE term_kind = 'headword') AS headword_search_term_count,
 			(SELECT COUNT(*) FROM entry_search_terms WHERE term_kind IN ('form', 'alias')) AS form_alias_search_term_count,
 			(
-				SELECT COUNT(*)
+				SELECT COUNT(DISTINCT e.normalized_headword)
 				FROM entries e
 				JOIN entry_learning_signals ls ON ls.entry_id = e.id
 				WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
-			) AS featured_source_count,
+			) AS featured_headword_count,
 			(SELECT COUNT(*) FROM featured_candidates) AS featured_candidate_count,
 			(SELECT COUNT(*) FROM entry_search_terms WHERE term_kind NOT IN ('headword', 'form', 'alias')) AS invalid_search_term_kind_rows
 	`).Scan(&result).Error; err != nil {
@@ -207,8 +207,8 @@ func assertPostgresRealDataReadModelCounts(t *testing.T, db *gorm.DB) {
 	if result.FormAliasSearchTermCount != result.EntryFormCount {
 		t.Fatalf("entry_search_terms form/alias count = %d; want entry_forms count %d", result.FormAliasSearchTermCount, result.EntryFormCount)
 	}
-	if result.FeaturedCandidateCount != result.FeaturedSourceCount {
-		t.Fatalf("featured_candidates count = %d; want source join count %d", result.FeaturedCandidateCount, result.FeaturedSourceCount)
+	if result.FeaturedCandidateCount != result.FeaturedHeadwordCount {
+		t.Fatalf("featured_candidates count = %d; want eligible distinct normalized_headword count %d", result.FeaturedCandidateCount, result.FeaturedHeadwordCount)
 	}
 	if result.InvalidSearchTermKindRows != 0 {
 		t.Fatalf("entry_search_terms invalid term_kind rows = %d; want 0", result.InvalidSearchTermKindRows)
@@ -301,48 +301,7 @@ func assertPostgresRealDataFeaturedCandidatesMatchSource(t *testing.T, db *gorm.
 	var result struct {
 		MismatchCount int64 `gorm:"column:mismatch_count"`
 	}
-	if err := db.Raw(`
-		WITH expected AS (
-			SELECT
-				e.id AS entry_id,
-				e.headword,
-				e.normalized_headword,
-				e.is_multiword,
-				e.pos,
-				ls.frequency_rank,
-				ls.cefr_level,
-				ls.oxford_level,
-				ls.cet_level,
-				ls.collins_stars,
-				ls.school_level,
-				CASE WHEN ls.frequency_rank > 0 THEN ls.frequency_rank ELSE 999999 END AS quality_rank
-			FROM entries e
-			JOIN entry_learning_signals ls ON ls.entry_id = e.id
-			WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
-		),
-		actual AS (
-			SELECT
-				entry_id,
-				headword,
-				normalized_headword,
-				is_multiword,
-				pos,
-				frequency_rank,
-				cefr_level,
-				oxford_level,
-				cet_level,
-				collins_stars,
-				school_level,
-				quality_rank
-			FROM featured_candidates
-		),
-		mismatches AS (
-			(SELECT * FROM expected EXCEPT ALL SELECT * FROM actual)
-			UNION ALL
-			(SELECT * FROM actual EXCEPT ALL SELECT * FROM expected)
-		)
-		SELECT COUNT(*) AS mismatch_count FROM mismatches
-	`).Scan(&result).Error; err != nil {
+	if err := db.Raw(featuredCandidatesSelectedSourceComparisonSQL).Scan(&result).Error; err != nil {
 		t.Fatalf("compare featured_candidates with real source data: %v", err)
 	}
 	if result.MismatchCount != 0 {

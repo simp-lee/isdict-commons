@@ -767,6 +767,7 @@ var postgresIntegrationExpectedGORMIndexDefinitions = []sqlIndexDefinitionTarget
 	{
 		TableName: "featured_candidates",
 		IndexName: "idx_featured_candidates_normalized_headword",
+		Unique:    true,
 		Method:    "btree",
 		Columns:   []string{"normalized_headword"},
 	},
@@ -2839,11 +2840,38 @@ func runReadModelRefreshSubtest(t *testing.T, db *gorm.DB) {
 		SchoolLevel: model.SchoolLevelMiddleSchool,
 	})
 
+	lowerFrequencyDuplicateEntry := createReadModelEntry(t, db, sourceRunID, "featured", model.POSNoun)
+	createFixtureRecord(t, db, "read_model_lower_frequency_duplicate_learning_signal", &model.EntryLearningSignal{
+		EntryID:       lowerFrequencyDuplicateEntry.ID,
+		CEFRLevel:     model.CEFRLevelC2,
+		FrequencyRank: 80,
+		CollinsStars:  model.CollinsFiveStars,
+	})
+	bestFrequencyDuplicateEntry := createReadModelEntry(t, db, sourceRunID, "Featured", model.POSVerb)
+	createFixtureRecord(t, db, "read_model_best_frequency_duplicate_learning_signal", &model.EntryLearningSignal{
+		EntryID:       bestFrequencyDuplicateEntry.ID,
+		CEFRLevel:     model.CEFRLevelA1,
+		FrequencyRank: 12,
+		CollinsStars:  model.CollinsOneStar,
+	})
+
+	lowerCEFRDuplicateEntry := createReadModelEntry(t, db, sourceRunID, "scope", model.POSNoun)
+	createFixtureRecord(t, db, "read_model_lower_cefr_duplicate_learning_signal", &model.EntryLearningSignal{
+		EntryID:   lowerCEFRDuplicateEntry.ID,
+		CEFRLevel: model.CEFRLevelA1,
+	})
+	highCEFRDuplicateEntry := createReadModelEntry(t, db, sourceRunID, "Scope", model.POSNoun)
+	createFixtureRecord(t, db, "read_model_high_cefr_duplicate_learning_signal", &model.EntryLearningSignal{
+		EntryID:   highCEFRDuplicateEntry.ID,
+		CEFRLevel: model.CEFRLevelC1,
+	})
+
 	if err := RefreshReadModels(db); err != nil {
 		t.Fatalf("RefreshReadModels() error = %v; want nil", err)
 	}
 	firstSearchTermCount := loadTableRowCount(t, db, "entry_search_terms")
 	firstFeaturedCount := loadTableRowCount(t, db, "featured_candidates")
+	firstFeaturedRanks := loadFeaturedCandidateQualityRanks(t, db)
 	if err := RefreshReadModels(db); err != nil {
 		t.Fatalf("second RefreshReadModels() error = %v; want nil", err)
 	}
@@ -2853,13 +2881,30 @@ func runReadModelRefreshSubtest(t *testing.T, db *gorm.DB) {
 	if got := loadTableRowCount(t, db, "featured_candidates"); got != firstFeaturedCount {
 		t.Fatalf("featured_candidates count after repeated refresh = %d; want %d", got, firstFeaturedCount)
 	}
+	assertFeaturedCandidateQualityRanksStable(t, db, firstFeaturedRanks)
 
 	assertReadModelSearchTerms(t, db, phraseEntry, phraseForm, phraseAlias)
 	assertReadModelMissingSignalsDefaultToZero(t, db, missingSignalEntry.ID)
-	assertFeaturedCandidate(t, db, phraseEntry.ID, true, 42, model.SchoolLevelHighSchool)
-	assertFeaturedCandidate(t, db, cefrOnlyEntry.ID, false, 999999, model.SchoolLevelUnknown)
-	assertFeaturedCandidate(t, db, schoolOnlyEntry.ID, true, 999999, model.SchoolLevelMiddleSchool)
+	phraseCandidate := assertFeaturedCandidate(t, db, phraseEntry.ID, true, model.SchoolLevelHighSchool)
+	cefrOnlyCandidate := assertFeaturedCandidate(t, db, cefrOnlyEntry.ID, false, model.SchoolLevelUnknown)
+	schoolOnlyCandidate := assertFeaturedCandidate(t, db, schoolOnlyEntry.ID, true, model.SchoolLevelMiddleSchool)
+	bestFrequencyDuplicateCandidate := assertFeaturedCandidate(t, db, bestFrequencyDuplicateEntry.ID, false, model.SchoolLevelUnknown)
+	highCEFRDuplicateCandidate := assertFeaturedCandidate(t, db, highCEFRDuplicateEntry.ID, false, model.SchoolLevelUnknown)
 	assertModelRowCount(t, db, &model.FeaturedCandidate{}, 0, "entry_id = ?", missingSignalEntry.ID)
+	assertModelRowCount(t, db, &model.FeaturedCandidate{}, 0, "entry_id = ?", lowerFrequencyDuplicateEntry.ID)
+	assertModelRowCount(t, db, &model.FeaturedCandidate{}, 0, "entry_id = ?", lowerCEFRDuplicateEntry.ID)
+	assertModelRowCount(t, db, &model.FeaturedCandidate{}, 1, "normalized_headword = ?", bestFrequencyDuplicateEntry.NormalizedHeadword)
+	assertModelRowCount(t, db, &model.FeaturedCandidate{}, 1, "normalized_headword = ?", highCEFRDuplicateEntry.NormalizedHeadword)
+	if bestFrequencyDuplicateCandidate.QualityRank >= phraseCandidate.QualityRank {
+		t.Fatalf("best frequency duplicate quality_rank = %d; want before phrase candidate rank %d", bestFrequencyDuplicateCandidate.QualityRank, phraseCandidate.QualityRank)
+	}
+	if highCEFRDuplicateCandidate.QualityRank >= cefrOnlyCandidate.QualityRank {
+		t.Fatalf("high CEFR duplicate quality_rank = %d; want before lower CEFR-only candidate rank %d", highCEFRDuplicateCandidate.QualityRank, cefrOnlyCandidate.QualityRank)
+	}
+	if cefrOnlyCandidate.QualityRank >= schoolOnlyCandidate.QualityRank {
+		t.Fatalf("CEFR-only candidate quality_rank = %d; want before school-only candidate rank %d", cefrOnlyCandidate.QualityRank, schoolOnlyCandidate.QualityRank)
+	}
+	assertFeaturedCandidateQualityRanksAreGlobalSequence(t, db)
 	assertFeaturedCandidatesMatchSourceJoin(t, db)
 }
 
@@ -2996,7 +3041,7 @@ func assertReadModelMissingSignalsDefaultToZero(t *testing.T, db *gorm.DB, entry
 	assertSearchTermLearningFields(t, term, 0, 0, 0, 0, 0, 0, 0)
 }
 
-func assertFeaturedCandidate(t *testing.T, db *gorm.DB, entryID int64, wantMultiword bool, wantQualityRank int, wantSchoolLevel int16) {
+func assertFeaturedCandidate(t *testing.T, db *gorm.DB, entryID int64, wantMultiword bool, wantSchoolLevel int16) model.FeaturedCandidate {
 	t.Helper()
 
 	var candidate model.FeaturedCandidate
@@ -3006,13 +3051,148 @@ func assertFeaturedCandidate(t *testing.T, db *gorm.DB, entryID int64, wantMulti
 	if candidate.IsMultiword != wantMultiword {
 		t.Fatalf("featured_candidates entry_id=%d is_multiword = %t; want %t", entryID, candidate.IsMultiword, wantMultiword)
 	}
-	if candidate.QualityRank != wantQualityRank {
-		t.Fatalf("featured_candidates entry_id=%d quality_rank = %d; want %d", entryID, candidate.QualityRank, wantQualityRank)
+	if candidate.QualityRank <= 0 {
+		t.Fatalf("featured_candidates entry_id=%d quality_rank = %d; want > 0", entryID, candidate.QualityRank)
 	}
 	if candidate.SchoolLevel != wantSchoolLevel {
 		t.Fatalf("featured_candidates entry_id=%d school_level = %d; want %d", entryID, candidate.SchoolLevel, wantSchoolLevel)
 	}
+
+	return candidate
 }
+
+func loadFeaturedCandidateQualityRanks(t *testing.T, db *gorm.DB) map[int64]int {
+	t.Helper()
+
+	var candidates []model.FeaturedCandidate
+	if err := db.Order("entry_id").Find(&candidates).Error; err != nil {
+		t.Fatalf("load featured_candidates quality ranks: %v", err)
+	}
+
+	ranks := make(map[int64]int, len(candidates))
+	for _, candidate := range candidates {
+		ranks[candidate.EntryID] = candidate.QualityRank
+	}
+
+	return ranks
+}
+
+func assertFeaturedCandidateQualityRanksStable(t *testing.T, db *gorm.DB, want map[int64]int) {
+	t.Helper()
+
+	got := loadFeaturedCandidateQualityRanks(t, db)
+	if len(got) != len(want) {
+		t.Fatalf("featured_candidates quality rank map size = %d; want %d", len(got), len(want))
+	}
+	for entryID, wantRank := range want {
+		gotRank, ok := got[entryID]
+		if !ok {
+			t.Fatalf("featured_candidates missing entry_id=%d after repeated refresh", entryID)
+		}
+		if gotRank != wantRank {
+			t.Fatalf("featured_candidates entry_id=%d quality_rank after repeated refresh = %d; want stable %d", entryID, gotRank, wantRank)
+		}
+	}
+}
+
+func assertFeaturedCandidateQualityRanksAreGlobalSequence(t *testing.T, db *gorm.DB) {
+	t.Helper()
+
+	var candidates []model.FeaturedCandidate
+	if err := db.Order("quality_rank, entry_id").Find(&candidates).Error; err != nil {
+		t.Fatalf("load featured_candidates ordered by quality_rank: %v", err)
+	}
+	for i, candidate := range candidates {
+		wantRank := i + 1
+		if candidate.QualityRank != wantRank {
+			t.Fatalf("featured_candidates quality_rank sequence at entry_id=%d = %d; want %d", candidate.EntryID, candidate.QualityRank, wantRank)
+		}
+	}
+}
+
+const featuredCandidatesSelectedSourceComparisonSQL = `
+WITH eligible AS (
+	SELECT
+		e.id AS entry_id,
+		e.headword,
+		e.normalized_headword,
+		e.is_multiword,
+		e.pos,
+		ls.frequency_rank,
+		ls.cefr_level,
+		ls.oxford_level,
+		ls.cet_level,
+		ls.collins_stars,
+		ls.school_level,
+		ROW_NUMBER() OVER (
+			PARTITION BY e.normalized_headword
+			ORDER BY
+				CASE WHEN ls.frequency_rank > 0 THEN 0 ELSE 1 END,
+				ls.frequency_rank,
+				CASE WHEN ls.cefr_level > 0 THEN 0 ELSE 1 END,
+				ls.cefr_level DESC,
+				CASE WHEN ls.collins_stars > 0 THEN 0 ELSE 1 END,
+				ls.collins_stars DESC,
+				CASE WHEN ls.school_level > 0 THEN 0 ELSE 1 END,
+				ls.school_level,
+				CASE WHEN e.headword = LOWER(e.headword) THEN 0 ELSE 1 END,
+				e.id
+		) AS headword_rn
+	FROM entries e
+	JOIN entry_learning_signals ls ON ls.entry_id = e.id
+	WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
+),
+selected AS (
+	SELECT
+		entry_id,
+		headword,
+		normalized_headword,
+		is_multiword,
+		pos,
+		frequency_rank,
+		cefr_level,
+		oxford_level,
+		cet_level,
+		collins_stars,
+		school_level,
+		(ROW_NUMBER() OVER (
+			ORDER BY
+				CASE WHEN frequency_rank > 0 THEN 0 ELSE 1 END,
+				frequency_rank,
+				CASE WHEN cefr_level > 0 THEN 0 ELSE 1 END,
+				cefr_level DESC,
+				CASE WHEN collins_stars > 0 THEN 0 ELSE 1 END,
+				collins_stars DESC,
+				CASE WHEN school_level > 0 THEN 0 ELSE 1 END,
+				school_level,
+				CASE WHEN headword = LOWER(headword) THEN 0 ELSE 1 END,
+				entry_id
+		))::integer AS quality_rank
+	FROM eligible
+	WHERE headword_rn = 1
+),
+actual AS (
+	SELECT
+		entry_id,
+		headword,
+		normalized_headword,
+		is_multiword,
+		pos,
+		frequency_rank,
+		cefr_level,
+		oxford_level,
+		cet_level,
+		collins_stars,
+		school_level,
+		quality_rank
+	FROM featured_candidates
+),
+mismatches AS (
+	(SELECT * FROM selected EXCEPT ALL SELECT * FROM actual)
+	UNION ALL
+	(SELECT * FROM actual EXCEPT ALL SELECT * FROM selected)
+)
+SELECT COUNT(*) AS mismatch_count FROM mismatches`
 
 func assertFeaturedCandidatesMatchSourceJoin(t *testing.T, db *gorm.DB) {
 	t.Helper()
@@ -3020,48 +3200,7 @@ func assertFeaturedCandidatesMatchSourceJoin(t *testing.T, db *gorm.DB) {
 	var result struct {
 		MismatchCount int64 `gorm:"column:mismatch_count"`
 	}
-	if err := db.Raw(`
-		WITH expected AS (
-			SELECT
-				e.id AS entry_id,
-				e.headword,
-				e.normalized_headword,
-				e.is_multiword,
-				e.pos,
-				ls.frequency_rank,
-				ls.cefr_level,
-				ls.oxford_level,
-				ls.cet_level,
-				ls.collins_stars,
-				ls.school_level,
-				CASE WHEN ls.frequency_rank > 0 THEN ls.frequency_rank ELSE 999999 END AS quality_rank
-			FROM entries e
-			JOIN entry_learning_signals ls ON ls.entry_id = e.id
-			WHERE ls.frequency_rank > 0 OR ls.cefr_level > 0 OR ls.school_level > 0
-		),
-		actual AS (
-			SELECT
-				entry_id,
-				headword,
-				normalized_headword,
-				is_multiword,
-				pos,
-				frequency_rank,
-				cefr_level,
-				oxford_level,
-				cet_level,
-				collins_stars,
-				school_level,
-				quality_rank
-			FROM featured_candidates
-		),
-		mismatches AS (
-			(SELECT * FROM expected EXCEPT SELECT * FROM actual)
-			UNION ALL
-			(SELECT * FROM actual EXCEPT SELECT * FROM expected)
-		)
-		SELECT COUNT(*) AS mismatch_count FROM mismatches
-	`).Scan(&result).Error; err != nil {
+	if err := db.Raw(featuredCandidatesSelectedSourceComparisonSQL).Scan(&result).Error; err != nil {
 		t.Fatalf("compare featured_candidates with source join: %v", err)
 	}
 	if result.MismatchCount != 0 {

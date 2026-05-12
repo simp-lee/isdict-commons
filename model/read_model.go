@@ -31,7 +31,7 @@ type FeaturedCandidate struct {
 	EntryID int64 `gorm:"primaryKey;autoIncrement:false;type:bigint"`
 
 	Headword           string `gorm:"type:text;not null"`
-	NormalizedHeadword string `gorm:"type:text;not null;index:idx_featured_candidates_normalized_headword"`
+	NormalizedHeadword string `gorm:"type:text;not null;uniqueIndex:idx_featured_candidates_normalized_headword"`
 	IsMultiword        bool   `gorm:"type:boolean;not null;index:idx_featured_candidates_is_multiword;index:idx_featured_candidates_is_multiword_quality_rank,priority:1"`
 	Pos                string `gorm:"type:text;not null"`
 	FrequencyRank      int    `gorm:"type:integer;not null;default:0;check:frequency_rank >= 0;index:idx_featured_candidates_frequency_rank"`
